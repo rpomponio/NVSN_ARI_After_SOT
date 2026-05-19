@@ -3,7 +3,7 @@ title: "Acute Respiratory Illness in Pediatric Solid Organ Transplants: A multic
 subtitle: "Analytical Results for Pediatric Transplant Manuscript"
 format:
  html:
-   output-file: "Repeater Adjustments.html"
+   output-file: "Repeaters Ignored.html"
    toc: true
    toc-depth: 2
    number-sections: false
@@ -52,9 +52,9 @@ dat[, ic_status:=fcase(
 dat[, studysite:=factor(studysite, c(8, 1:6),
                        c("Pittsburgh", "Nashville", "Rochester", "Cincinnati",
                          "Seattle", "Houston", "Kansas City"))]
-dat[, c_ariyear:=factor(c_ariyear, 2:8,
+dat[, c_ariyear:=factor(c_ariyear, 2:9,
                         c("2016-17", "2017-18", "2018-19", "2019-20", "2020-21",
-                          "2021-22", "2022-23"))]
+                          "2021-22", "2022-23", "2023-24"))]
 dat[, sexch:=factor(sexch, 2:1, c("Female", "Male"))]
 dat[, c_race_int:=factor(c_race_int, c(1, 2, 4, 3),
                          c("White NH", "Black NH", "Hispanic", "Other NH"))]
@@ -81,8 +81,7 @@ dat[is.na(exclusion1), exclusion2:=fcase(
   is.na(c_ageyears), "Missing age",
   is.na(c_race_int), "Missing race/ethnicity",
   is.na(sexch), "Missing sex",
-  research_tested==0, "Missing lab results",
-  is.na(individ), "Missing repeater identifier")]
+  research_tested==0, "Missing lab results")]
 ```
 
 ```{r included data}
@@ -113,29 +112,6 @@ p <- consort_plot(
 p
 ```
 
-# Repeated Enrollments {.appendix}
-
-```{r individuals}
-ind <- inc[, .(.N, earliest=min(scradmitdate), sot=sum(is_sot)), by=individ]
-ind[, sot_lifetime:=as.integer(sot>0)]
-ind[, sot_lifetime:=factor(
-  sot_lifetime, 0:1,
-  c("Children without immunocomp. conditions", "Children with SOT"))]
-```
-
-[The bar plots in @fig-repeated-counts depict the frequency of repeat enrollments, observed in the analytical dataset after exclusions shown in @fig-consort. Cases were grouped at the individual (patient) level, then categorized based on SOT status (individuals who changed status types between enrollments were categorized as SOTs). In total, there were `r format(nrow(ind), big.mark=",")` individuals observed in the analytical sample. Among those, the average number of enrollments was `r format(mean(ind$N), digits=3)` per patient.]{.aside}
-
-```{r}
-#| label: fig-repeated-counts
-#| fig-cap: "Bar chart of number of enrollments per individual, by SOT status"
-#| echo: false
-ggplot(ind, aes(x=N)) +
-  geom_bar() +
-  facet_wrap(~sot_lifetime, scales="free_y") +
-  scale_x_continuous(breaks=seq(1, 11, 2)) +
-  labs(x="Number of enrollments included in analysis", y="Freq")
-```
-
 # Baseline Characteristics
 
 ```{r multivar gee 1}
@@ -145,10 +121,9 @@ desc.labs <- list(studysite="Site", c_ariyear="Season", c_agemonths="Age in mont
 inc.sub <- inc[studysite!="Cincinnati" & c_ariyear!="2021-22"]
 inc.sub$studysite <- droplevels(inc.sub$studysite)
 inc.sub$c_ariyear <- droplevels(inc.sub$c_ariyear)
-fit.sot.desc <- geeglm(reformulate(desc.vars, response="is_sot"),
+fit.sot.desc <- glm(reformulate(desc.vars, response="is_sot"),
                        dat=inc.sub,
-                       id=individ, family=binomial,
-                       corstr="exchangeable")
+                       family=binomial)
 tab.sot.desc <- tbl_regression(
   fit.sot.desc,
   label=desc.labs,
@@ -201,47 +176,38 @@ virus.labs <- list(novirus="No virus isolated",
 ```
 
 ```{r subset COVID}
-inc.sub <- inc[c_ariyear %in% c("2019-20", "2020-21", "2021-22", "2022-23")]
+inc.sub <- inc[c_ariyear %in% c("2019-20", "2020-21", "2021-22", "2022-23", "2023-24")]
 inc.sub$c_ariyear <- droplevels(inc.sub$c_ariyear)
 ```
 
 ```{r univariate gee}
-fit.novir <- geeglm(novirus==TRUE ~ is_sot,
+fit.novir <- glm(novirus==TRUE ~ is_sot,
                    dat=inc[!is.na(novirus)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.hcov <- geeglm(hcov_pos==TRUE ~ is_sot,
+                   family=binomial)
+fit.hcov <- glm(hcov_pos==TRUE ~ is_sot,
                    dat=inc[!is.na(hcov_pos)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.flu <- geeglm(anyflu_result==TRUE ~ is_sot,
+                   family=binomial)
+fit.flu <- glm(anyflu_result==TRUE ~ is_sot,
                    dat=inc[!is.na(anyflu_result)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.rsv <- geeglm(c_rsv_result==TRUE ~ is_sot,
+                   family=binomial)
+fit.rsv <- glm(c_rsv_result==TRUE ~ is_sot,
                    dat=inc[!is.na(c_rsv_result)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.covid <- geeglm(c_sarscov2==TRUE ~ is_sot,
+                   family=binomial)
+fit.covid <- glm(c_sarscov2==TRUE ~ is_sot,
                    dat=inc.sub[!is.na(c_sarscov2)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.adeno <- geeglm(tAdeno==TRUE ~ is_sot,
+                   family=binomial)
+fit.adeno <- glm(tAdeno==TRUE ~ is_sot,
                    dat=inc[!is.na(tAdeno)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.mpv <- geeglm(tmpv==TRUE ~ is_sot,
+                   family=binomial)
+fit.mpv <- glm(tmpv==TRUE ~ is_sot,
                    dat=inc[!is.na(tmpv)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.piv <- geeglm(piv14_pos==TRUE ~ is_sot,
+                   family=binomial)
+fit.piv <- glm(piv14_pos==TRUE ~ is_sot,
                    dat=inc[!is.na(piv14_pos)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.rhent <- geeglm(rhent_pos==TRUE ~ is_sot,
+                   family=binomial)
+fit.rhent <- glm(rhent_pos==TRUE ~ is_sot,
                    dat=inc[!is.na(rhent_pos)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
+                   family=binomial)
 i <- 1
 tab.viral.pos <- tbl_regression(
   fit.novir,
@@ -268,51 +234,42 @@ for (fit in list(fit.hcov, fit.flu, fit.rsv, fit.covid, fit.adeno,
 ```
 
 ```{r multivar gee 2}
-fit.novir <- geeglm(novirus==TRUE ~ is_sot + studysite + c_ariyear +
+fit.novir <- glm(novirus==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(novirus)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.hcov <- geeglm(hcov_pos==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.hcov <- glm(hcov_pos==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(hcov_pos)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.flu <- geeglm(anyflu_result==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.flu <- glm(anyflu_result==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(anyflu_result)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.rsv <- geeglm(c_rsv_result==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.rsv <- glm(c_rsv_result==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(c_rsv_result)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.covid <- geeglm(c_sarscov2==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.covid <- glm(c_sarscov2==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc.sub[!is.na(c_sarscov2)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.adeno <- geeglm(tAdeno==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.adeno <- glm(tAdeno==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(tAdeno)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.mpv <- geeglm(tmpv==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.mpv <- glm(tmpv==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(tmpv)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.piv <- geeglm(piv14_pos==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.piv <- glm(piv14_pos==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(piv14_pos)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.rhent <- geeglm(rhent_pos==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.rhent <- glm(rhent_pos==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(rhent_pos)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
+                   family=binomial)
 i <- 1
 tab.viral.adj <- tbl_regression(
   fit.novir,
@@ -416,96 +373,81 @@ clinical.labs <- list(fever="Fever", fevertemp="Temperature (Fahrenheit)",
 ```
 
 ```{r multivar gee 3}
-fit.fever <- geeglm(fever==TRUE ~ is_sot + studysite + c_ariyear +
+fit.fever <- glm(fever==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(fever)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.fevertemp <- geeglm(fevertemp ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.fevertemp <- glm(fevertemp ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(fevertemp)],
-                   id=individ, family=gaussian,
-                   corstr="exchangeable")
-fit.scough <- geeglm(scough==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=gaussian)
+fit.scough <- glm(scough==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(scough)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.snasal <- geeglm(snasal==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.snasal <- glm(snasal==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(snasal)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.ssoreth <- geeglm(ssoreth==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.ssoreth <- glm(ssoreth==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(ssoreth)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sdyspnea <- geeglm(sdyspnea==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sdyspnea <- glm(sdyspnea==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sdyspnea)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.smyalgias <- geeglm(smyalgias==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.smyalgias <- glm(smyalgias==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(smyalgias)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sfatigue <- geeglm(sfatigue==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sfatigue <- glm(sfatigue==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sfatigue)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sheadache <- geeglm(sheadache==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sheadache <- glm(sheadache==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sheadache)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.seye <- geeglm(seye==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.seye <- glm(seye==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(seye)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.svomit <- geeglm(svomit==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.svomit <- glm(svomit==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(svomit)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sappetite <- geeglm(sappetite==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sappetite <- glm(sappetite==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sappetite)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sdiarrhea <- geeglm(sdiarrhea==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sdiarrhea <- glm(sdiarrhea==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sdiarrhea)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sirritable <- geeglm(sirritable==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sirritable <- glm(sirritable==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sirritable)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.sskin <- geeglm(sskin==TRUE ~ is_sot + studysite + c_ariyear +
+                   family=binomial)
+fit.sskin <- glm(sskin==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(sskin)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.finalstatus <- geeglm(
+                   family=binomial)
+fit.finalstatus <- glm(
   c_finalstatus=="Admitted" ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int,
-  dat=inc[!is.na(c_finalstatus)], id=individ, family=binomial, corstr="exchangeable")
-fit.los <- geeglm(
+  dat=inc[!is.na(c_finalstatus)], family=binomial)
+fit.los <- glm(
   log(c_los + 1) ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int,
-  dat=inc[!is.na(c_los)], id=individ, family=gaussian, corstr="exchangeable")
-fit.hospO2 <- geeglm(
+  dat=inc[!is.na(c_los)], family=gaussian)
+fit.hospO2 <- glm(
   c_hospO2 ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int,
-  dat=inc[!is.na(c_hospO2)], id=individ, family=binomial, corstr="exchangeable")
-fit.icu <- geeglm(
+  dat=inc[!is.na(c_hospO2)], family=binomial)
+fit.icu <- glm(
   c_icu ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int,
-  dat=inc[!is.na(c_icu)], id=individ, family=binomial, corstr="exchangeable")
-fit.mvecmo <- geeglm(
+  dat=inc[!is.na(c_icu)], family=binomial)
+fit.mvecmo <- glm(
   c_mv_ecmo ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int,
-  dat=inc[!is.na(c_mv_ecmo)], id=individ, family=binomial, corstr="exchangeable")
+  dat=inc[!is.na(c_mv_ecmo)], family=binomial)
 i <- 1
 tab.clin.adj <- tbl_regression(
   fit.fever,
@@ -633,12 +575,10 @@ flu[is.na(daysill_imp), daysill_imp:=round(mean(flu$daysill_calc, na.rm=TRUE))]
 ```
 
 ```{r multivar gee 4}
-fit.prior <- geeglm(pr_antivir==TRUE ~ is_sot + daysill_imp,
-                   dat=flu, id=individ, family=binomial,
-                   corstr="exchangeable")
-fit.current <- geeglm(c_hantivirdur==TRUE ~ is_sot + daysill_imp,
-                   dat=flu, id=individ, family=binomial,
-                   corstr="exchangeable")
+fit.prior <- glm(pr_antivir==TRUE ~ is_sot + daysill_imp,
+                   dat=flu, family=binomial)
+fit.current <- glm(c_hantivirdur==TRUE ~ is_sot + daysill_imp,
+                   dat=flu, family=binomial)
 tab.antiviral.adj <- tbl_stack(
   list(
     tbl_regression(
@@ -723,7 +663,8 @@ inc[, seasonstart:=fcase(
   c_ariyear=="2019-20", as.IDate("2019-07-01"),
   c_ariyear=="2020-21", as.IDate("2020-07-01"),
   c_ariyear=="2021-22", as.IDate("2021-07-01"),
-  c_ariyear=="2022-23", as.IDate("2022-07-01"))]
+  c_ariyear=="2022-23", as.IDate("2022-07-01"),
+  c_ariyear=="2023-24", as.IDate("2023-07-01"))]
 inc[c_agemonths >= 6, currentfluvax:=fcase(
   vcurrent==1, TRUE,
   fluCSregnum %in% c(1, 2), TRUE,
@@ -755,18 +696,16 @@ vaccine.labs <- list(currentfluvax="Current season Flu vaccination",
 ```
 
 ```{r multivar gee 5}
-fit.fluvax <- geeglm(currentfluvax==TRUE ~ is_sot + studysite + c_ariyear +
+fit.fluvax <- glm(currentfluvax==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc[!is.na(currentfluvax)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
-inc.sub <- inc[c_ariyear %in% c("2020-21", "2021-22", "2022-23")]
+                   family=binomial)
+inc.sub <- inc[c_ariyear %in% c("2020-21", "2021-22", "2022-23", "2023-24")]
 inc.sub$c_ariyear <- droplevels(inc.sub$c_ariyear)
-fit.covvax <- geeglm(anycovidvax==TRUE ~ is_sot + studysite + c_ariyear +
+fit.covvax <- glm(anycovidvax==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int,
                    dat=inc.sub[!is.na(anycovidvax)],
-                   id=individ, family=binomial,
-                   corstr="exchangeable")
+                   family=binomial)
 tab.vaccines.adj <- tbl_stack(
   list(
     tbl_regression(
@@ -859,11 +798,10 @@ tpx.sub <- tpx[! studysite %in% c("Rochester", "Seattle", "Kansas City") &
 tpx.sub$studysite <- droplevels(tpx.sub$studysite)
 tpx.sub$c_ariyear <- droplevels(tpx.sub$c_ariyear)
 tpx.sub$tpx_organ <- droplevels(tpx.sub$tpx_organ)
-fit.tpx.desc <- geeglm(tpx_over1yr ~ studysite + c_ariyear + c_agemonths +
+fit.tpx.desc <- glm(tpx_over1yr ~ studysite + c_ariyear + c_agemonths +
                          sexch + c_race_int + tpx_organ,
                        data=tpx.sub[!is.na(tpx_over1yr)],
-                       id=individ, family=binomial,
-                       corstr="exchangeable")
+                       family=binomial)
 tab.tpx.desc <- tbl_regression(
   fit.tpx.desc,
   label=tpx.labs,
@@ -897,18 +835,18 @@ tbl_merge(
 
 
 ```{r tpx clinical}
-fit.finalstatus <- geeglm(
+fit.finalstatus <- glm(
   c_finalstatus=="Admitted" ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + tpx_organ,
-  dat=tpx.sub[!is.na(c_finalstatus) & !is.na(tpx_over1yr)], id=individ, family=binomial, corstr="exchangeable")
-fit.los <- geeglm(
+  dat=tpx.sub[!is.na(c_finalstatus) & !is.na(tpx_over1yr)], family=binomial)
+fit.los <- glm(
   log(c_los + 1) ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + tpx_organ,
-  dat=tpx.sub[!is.na(c_los) & !is.na(tpx_over1yr)], id=individ, family=gaussian, corstr="exchangeable")
-fit.hospO2 <- geeglm(
+  dat=tpx.sub[!is.na(c_los) & !is.na(tpx_over1yr)], family=gaussian)
+fit.hospO2 <- glm(
   c_hospO2 ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + tpx_organ,
-  dat=tpx.sub[!is.na(c_hospO2) & !is.na(tpx_over1yr)], id=individ, family=binomial, corstr="exchangeable")
-fit.icu <- geeglm(
+  dat=tpx.sub[!is.na(c_hospO2) & !is.na(tpx_over1yr)], family=binomial)
+fit.icu <- glm(
   c_icu ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + tpx_organ,
-  dat=tpx.sub[!is.na(c_icu) & !is.na(tpx_over1yr)], id=individ, family=binomial, corstr="exchangeable")
+  dat=tpx.sub[!is.na(c_icu) & !is.na(tpx_over1yr)], family=binomial)
 i <- 16
 tab.clin.tpx <- tbl_regression(
   fit.finalstatus,
@@ -981,7 +919,7 @@ plt.rsv <- ggplot(tab.rsv[order(sot_status, c_ariyear)],
   geom_ribbon(aes(ymin=lwr, ymax=upr, fill=factor(sot_status)), col=NA, alpha=0.1) +
   labs(x="", y="% Positivity", color="Status", fill="Status") +
   scale_y_continuous(breaks=seq(0, 1, 0.25), labels=seq(0, 100, 25), limits=c(0, 0.5)) +
-  scale_x_continuous(breaks=1:7, labels=levels(tab.rsv$c_ariyear)) +
+  scale_x_continuous(breaks=1:8, labels=levels(tab.rsv$c_ariyear)) +
   theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1))
 ```
 
@@ -1001,7 +939,7 @@ plt.hcov <- ggplot(tab.hcov[order(sot_status, c_ariyear)],
   geom_ribbon(aes(ymin=lwr, ymax=upr, fill=factor(sot_status)), col=NA, alpha=0.1) +
   labs(x="", y="% Positivity", color="Status", fill="Status") +
   scale_y_continuous(breaks=seq(0, 1, 0.25), labels=seq(0, 100, 25), limits=c(0, 0.5)) +
-  scale_x_continuous(breaks=1:7, labels=levels(tab.hcov$c_ariyear)) +
+  scale_x_continuous(breaks=1:8, labels=levels(tab.hcov$c_ariyear)) +
   theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1))
 ```
 
