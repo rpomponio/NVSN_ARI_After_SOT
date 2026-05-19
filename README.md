@@ -16,3 +16,11 @@
 └───derived
 │   ...
 ```
+
+# Notes
+
+Useful code for spot checking number of repeat episodes:
+
+```
+inc[is_sot==1 & !is.na(individ), .(sum(duplicated(individ)), .N)]
+```
