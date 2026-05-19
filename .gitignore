@@ -5,3 +5,4 @@
 data/*
 archive/*
 derived/*
+*.html

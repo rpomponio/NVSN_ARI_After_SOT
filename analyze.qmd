@@ -1,0 +1,1037 @@
+---
+title: "Acute Respiratory Illness in Pediatric Solid Organ Transplants: A multicenter analysis, 2016-2024"
+subtitle: "Analytical Results for Pediatric Transplant Manuscript"
+format:
+ html:
+   output-file: "Revised Comprehensive Report.html"
+   toc: true
+   toc-depth: 2
+   number-sections: false
+   embed-resources: true
+   code-fold: true
+execute: 
+  warning: false
+fig-cap-location: top
+abstract-title: "Overview"
+abstract: "This document contains all code, figures, and tables used to analyze data for the NVSN paper comparing children with solid organ transplant (SOT) to those without immunocompromising conditions. We begin by defining the study population in terms of cases included/excluded for analytical reasons. Next, we describe and compare characteristics between children with SOT and those without immunocompromising conditions, using multivariate statistical analyses to adjust for covariates. When comparing the two groups on clinical outcomes we adjust for site, season, age, race/ethnicity, and comorbid conditions as those were baseline characteristics that differed significantly between groups. We perform several supplemental comparisons on antiviral utilization and vaccine uptake. Finally, we compare children who received an SOT more than one year before experiencing an ARI epsiode to those who received an SOT less than one year before experienceing ARI; here again we report the results of multivariate statistical analyses."
+---
+
+```{r setup}
+library(data.table)
+library(gtsummary)
+library(ggplot2)
+library(consort)
+library(geepack)
+library(ggpubr)
+```
+
+```{r data}
+dat <- fread("derived/ARI_Analytical_Dataset_2016-2024.csv", na.strings="")
+```
+
+```{r IC classification}
+dat[, ic_status:=fcase(
+  tpx_type=="SOT", "SOT",
+  tpx_type=="BMT", "BMT",
+  grepl("SOT", c_uimmuneoth_sp, ignore.case=TRUE), "SOT",
+  grepl("BMT", c_uimmuneoth_sp, ignore.case=TRUE), "BMT",
+  grepl("HSCT", c_uimmuneoth_sp, ignore.case=TRUE), "BMT",
+  grepl("stem cell", c_uimmuneoth_sp, ignore.case=TRUE), "BMT",
+  c_ucancer_yn==1, "Malignancy",
+  grepl("\\w+",  c_ucanceroth_sp), "Malignancy",
+  grepl("immunosup", c_uimmuneoth_sp, ignore.case=TRUE), "Medication",
+  c_usickle==1, "SCD",
+  c_uhematologic==1, "Blood Disorder",
+  grepl("\\w+", c_uhemeoth_sp), "Blood Disorder",
+  grepl("\\w+", c_uimmuneoth_sp), "Other Deficiency",
+  c_uimmune_yn==1, "Other Deficiency",
+  default="Non-IC")]
+```
+
+```{r var encoding 1}
+dat[, studysite:=factor(studysite, c(8, 1:6),
+                       c("Pittsburgh", "Nashville", "Rochester", "Cincinnati",
+                         "Seattle", "Houston", "Kansas City"))]
+dat[, c_ariyear:=factor(c_ariyear, 2:9,
+                        c("2016-17", "2017-18", "2018-19", "2019-20", "2020-21",
+                          "2021-22", "2022-23", "2023-24"))]
+dat[, sexch:=factor(sexch, 2:1, c("Female", "Male"))]
+dat[, c_race_int:=factor(c_race_int, c(1, 2, 4, 3),
+                         c("White NH", "Black NH", "Hispanic", "Other NH"))]
+dat[, c_comorbidcat:=fcase(
+  c_xunderlying==0, "None",
+  c_uresp==0 & c_ucardiovasc==0 & c_unuerologic==0, "None",
+  c_uresp==1 & c_ucardiovasc==0 & c_unuerologic==0, "Respiratory condition",
+  c_uresp==0 & c_ucardiovasc==1 & c_unuerologic==0, "Cardiovascular condition",
+  c_uresp==0 & c_ucardiovasc==0 & c_unuerologic==1, "Neurologic condition",
+  c_uresp==1 & c_ucardiovasc==1, "Other/multiple conditions",
+  c_uresp==1 & c_unuerologic==1, "Other/multiple conditions",
+  c_ucardiovasc==1 & c_unuerologic==1, "Other/multiple conditions",
+  c_xunderlying==1 & ic_status=="Non-IC", "Other/multiple conditions")]
+dat[, c_comorbidcat:=factor(c_comorbidcat, c("None", "Respiratory condition",
+                                             "Cardiovascular condition",
+                                             "Neurologic condition",
+                                             "Other/multiple conditions"))]
+```
+
+# Study Population
+
+```{r exclusions}
+dat[, exclusion1:=fcase(
+  ic_status %in% c("SCD", "Blood Disorder"), "Blood Disorder",
+  ic_status=="Medication", "Immunosuppressive Medication(s)",
+  ic_status=="Other Deficiency", "Other Immune Deficiency")]
+dat[is.na(exclusion1), sot_status:=fcase(
+  ic_status=="SOT", "Children with SOT",
+  default="Children without immunocomp. conditions")]
+dat[is.na(exclusion1), exclusion2:=fcase(
+  is.na(c_ageyears), "Missing age",
+  is.na(c_race_int), "Missing race/ethnicity",
+  is.na(c_comorbidcat), "Missing comorbidities",
+  is.na(sexch), "Missing sex",
+  research_tested==0, "Missing lab results")]
+```
+
+```{r included data}
+inc <- dat[is.na(exclusion1) & is.na(exclusion2)]
+inc[, is_sot:=as.integer(sot_status=="Children with SOT")]
+inc[, individ:=factor(individ)]
+setkey(inc, individ, scradmitdate)
+```
+
+[The diagram in @fig-consort depicts case-level inclusion in this analysis on the basis of data availability. The total sample size during the period was `r format(nrow(dat), big.mark=",")` cases. After excluding some cases for the reasons shown in @fig-consort, our analytical sample size was `r format(nrow(inc), big.mark=",")` cases.]{.aside}
+
+```{r}
+#| label: fig-consort
+#| fig-cap: Diagram representing case inclusion
+#| fig-width: 7
+#| echo: false
+p <- consort_plot(
+  dat,
+  orders=c(
+    Caseid="Total cases, 2016-2024",
+    exclusion1="Excluded",
+    sot_status="Total cases eligible",
+    exclusion2="Excluded",
+    Caseid="Complete cases"),
+  side_box=c("exclusion1", "exclusion2"),
+  allocation=c("sot_status"),
+  cex=0.75)
+p
+```
+
+# Baseline Characteristics
+
+```{r multivar gee 1}
+desc.vars <- c("studysite", "c_ariyear", "c_agemonths", "sexch", "c_race_int",
+               "c_comorbidcat")
+desc.labs <- list(studysite="Site", c_ariyear="Season", c_agemonths="Age in months",
+                  sexch="Sex", c_race_int="Race/ethnicity",
+                  c_comorbidcat="Comorbid conditions")
+inc.sub <- inc[studysite!="Cincinnati" & c_ariyear!="2021-22"]
+inc.sub$studysite <- droplevels(inc.sub$studysite)
+inc.sub$c_ariyear <- droplevels(inc.sub$c_ariyear)
+fit.sot.desc <- glm(reformulate(desc.vars, response="is_sot"),
+                       dat=inc.sub,
+                       family=binomial)
+tab.sot.desc <- tbl_regression(
+  fit.sot.desc,
+  label=desc.labs,
+  conf.int=FALSE,
+  exponentiate=TRUE) |>
+  bold_p() |>
+  modify_header(estimate="**AOR**") |>
+  remove_abbreviation() |>
+  modify_abbreviation("AOR = Adjusted Odds Ratio")
+```
+
+[In @tbl-descriptive-summary we compare children with SOT to those without immunocompromising conditions on baseline characteristics, including age, sex, race/ethnicity, and comorbid conditions. For each characteristic, we report the adjusted odds ratio (AOR) of identifying with SOT, conditional on all other characteristics in the table. Associated p-values are reported and bolded if statistically significant. Note, we did not observe children with SOT enrolled from Cincinnati during the period, nor any children with SOT enrolled during the 2021-22 respiratory season; for these strata we do not report corresponding statistical results (odds of status=SOT are zero).]{.aside}
+
+```{r}
+#| label: tbl-descriptive-summary
+#| tbl-cap: "Descriptive summary of cases by status"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_summary(
+      inc,
+      by=sot_status,
+      label=desc.labs,
+      include=desc.vars) |>
+      add_overall(last=TRUE),
+    tab.sot.desc),
+  tab_spanner=FALSE) |>
+  remove_footnote_header() |>
+  modify_header(label="**Baseline Characteristics**")
+```
+
+## Propensity Score Overlap {.appendix}
+
+Treating the regression in @tbl-descriptive-summary as a propensity score model (ie, the propensity to identify as a child with SOT), I examine the overlap in scores between groups. The following figure demonstrates partial overlap:
+
+```{r}
+#| label: fig-ps-overlap
+#| fig-cap: "Propensity score overlap by status"
+#| echo: false
+inc.sub[, ps1:=as.numeric(predict(fit.sot.desc, type="response"))]
+inc.sub[, ps1_logodds:=as.numeric(predict(fit.sot.desc))]
+ggplot(inc.sub, aes(x=ps1_logodds, col=sot_status, fill=sot_status)) +
+  geom_density(bw=3e-1, alpha=0.5) +
+  geom_vline(xintercept=inc.sub[is_sot==0, quantile(ps1_logodds, 0.95)], linetype="dashed") +
+  theme_pubclean() +
+  labs(col="Group", fill="Group")
+```
+[While @fig-ps-overlap depicts the overlap in PS on the log-odds scale, it does not quantify the amount of overlap. Among `r sum(inc.sub$is_sot)` cases in children with SOT, the proportion with PS less than or equal to the 95th percentile of PS in children without IC conditions (depicted with the vertical dashed line) was `r format(inc.sub[is_sot==1, mean(ps1 < inc.sub[is_sot==0, quantile(ps1, 0.95)])], digits=3)`.]{.aside}
+
+# Viral Detections
+
+```{r virus encoding}
+inc[, novirus:=fcase(c_coinfn==0, TRUE, c_coinfn>0, FALSE)]
+inc[, hcov_pos:=fcase(hcov_pos==1, T, hcov_pos==0, F)]
+inc[, anyflu_result:=fcase(anyflu_result==1, T, anyflu_result==0, F)]
+inc[, c_rsv_result:=fcase(c_rsv_result==1, T, c_rsv_result==0, F)]
+inc[, c_sarscov2:=fcase(c_sarscov2==1, T, c_sarscov2==0, F)]
+inc[, tAdeno:=fcase(tAdeno==1, T, tAdeno==0, F)]
+inc[, rhent_pos:=fcase(rhent_pos==1, T, rhent_pos==0, F)]
+inc[, tevd68:=fcase(tevd68==1, T, tevd68==0, F)]
+inc[, tmpv:=fcase(tmpv==1, T, tmpv==0, F)]
+inc[, piv14_pos:=fcase(piv14_pos==1, T, piv14_pos==0, F)]
+virus.labs <- list(novirus="No virus isolated",
+                   hcov_pos="Human Coronavirus", anyflu_result="Influenza",
+                   c_rsv_result="RSV", c_sarscov2="SARS-CoV-2", tAdeno="Adenovirus",
+                   tmpv="Metapneumovirus", piv14_pos="Parainfluenza",
+                   rhent_pos="Rhino/enterovirus", tevd68="EV-D68")
+```
+
+```{r subset COVID}
+inc.sub <- inc[c_ariyear %in% c("2019-20", "2020-21", "2021-22", "2022-23", "2023-24")]
+inc.sub$c_ariyear <- droplevels(inc.sub$c_ariyear)
+```
+
+```{r univariate gee}
+fit.novir <- glm(novirus==TRUE ~ is_sot,
+                   dat=inc[!is.na(novirus)],
+                   family=binomial)
+fit.hcov <- glm(hcov_pos==TRUE ~ is_sot,
+                   dat=inc[!is.na(hcov_pos)],
+                   family=binomial)
+fit.flu <- glm(anyflu_result==TRUE ~ is_sot,
+                   dat=inc[!is.na(anyflu_result)],
+                   family=binomial)
+fit.rsv <- glm(c_rsv_result==TRUE ~ is_sot,
+                   dat=inc[!is.na(c_rsv_result)],
+                   family=binomial)
+fit.covid <- glm(c_sarscov2==TRUE ~ is_sot,
+                   dat=inc.sub[!is.na(c_sarscov2)],
+                   family=binomial)
+fit.adeno <- glm(tAdeno==TRUE ~ is_sot,
+                   dat=inc[!is.na(tAdeno)],
+                   family=binomial)
+fit.mpv <- glm(tmpv==TRUE ~ is_sot,
+                   dat=inc[!is.na(tmpv)],
+                   family=binomial)
+fit.piv <- glm(piv14_pos==TRUE ~ is_sot,
+                   dat=inc[!is.na(piv14_pos)],
+                   family=binomial)
+fit.rhent <- glm(rhent_pos==TRUE ~ is_sot,
+                   dat=inc[!is.na(rhent_pos)],
+                   family=binomial)
+i <- 1
+tab.viral.pos <- tbl_regression(
+  fit.novir,
+  label=list(is_sot ~ virus.labs[[i]]),
+  conf.int=FALSE,
+  exponentiate=TRUE,
+  include=is_sot) |>
+  bold_p()
+# iterate over remaining viruses and stack tables
+for (fit in list(fit.hcov, fit.flu, fit.rsv, fit.covid, fit.adeno,
+                 fit.mpv, fit.piv, fit.rhent)) {
+  i <- i + 1
+  tab.viral.pos <- tbl_stack(
+    list(
+      tab.viral.pos,
+      tbl_regression(
+        fit,
+        label=list(is_sot ~ virus.labs[[i]]),
+        conf.int=FALSE,
+        exponentiate=TRUE,
+        include=is_sot) |>
+        bold_p()))
+}
+```
+
+```{r multivar gee 2}
+fit.novir <- glm(novirus==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(novirus)],
+                   family=binomial)
+fit.hcov <- glm(hcov_pos==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(hcov_pos)],
+                   family=binomial)
+fit.flu <- glm(anyflu_result==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(anyflu_result)],
+                   family=binomial)
+fit.rsv <- glm(c_rsv_result==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(c_rsv_result)],
+                   family=binomial)
+fit.covid <- glm(c_sarscov2==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc.sub[!is.na(c_sarscov2)],
+                   family=binomial)
+fit.adeno <- glm(tAdeno==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(tAdeno)],
+                   family=binomial)
+fit.mpv <- glm(tmpv==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(tmpv)],
+                   family=binomial)
+fit.piv <- glm(piv14_pos==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(piv14_pos)],
+                   family=binomial)
+fit.rhent <- glm(rhent_pos==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(rhent_pos)],
+                   family=binomial)
+i <- 1
+tab.viral.adj <- tbl_regression(
+  fit.novir,
+  label=list(is_sot ~ virus.labs[[i]]),
+  conf.int=FALSE,
+  exponentiate=TRUE,
+  include=is_sot) |>
+  bold_p() |>
+  modify_header(estimate="**AOR**") |>
+  remove_abbreviation() |>
+  modify_abbreviation("AOR = Adjusted Odds Ratio")
+# iterate over remaining viruses and stack tables
+for (fit in list(fit.hcov, fit.flu, fit.rsv, fit.covid, fit.adeno, fit.mpv,
+                 fit.piv, fit.rhent)) {
+  i <- i + 1
+  tab.viral.adj <- tbl_stack(
+    list(
+      tab.viral.adj,
+      tbl_regression(
+        fit,
+        label=list(is_sot ~ virus.labs[[i]]),
+        conf.int=FALSE,
+        exponentiate=TRUE,
+        include=is_sot) |>
+        bold_p() |>
+        modify_header(estimate="**AOR**") |>
+        remove_abbreviation() |>
+        modify_abbreviation("AOR = Adjusted Odds Ratio")))
+}
+```
+
+[In @tbl-viruses-summary we report the detection likelihood of respiratory viruses, stratifying by status. For each respiratory virus, we report the unadjusted odds ratio of children with SOT versus those without immunocompromising conditions and associated p-values. We also adjust for site, season, age, race/ethnicity, and comorbid conditions and report corresponding statistical results. Beneath each virus, we report the number of cases without available test results; human coronavirus was inconsistently tested across sites prior to 2020, and SARS-CoV-2 testing was not performed until 2020.]{.aside}
+
+```{r}
+#| label: tbl-viruses-summary
+#| tbl-cap: "Summary of Viral Pathogens and SOT Effects"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_summary(
+      inc,
+      by=sot_status,
+      label=virus.labs,
+      include=names(virus.labs),
+      missing_text="Not Tested") |>
+      add_overall(last=TRUE),
+    tab.viral.pos,
+    tab.viral.adj),
+  tab_spanner=c("Descriptive", "Unadjusted", "Adjusted"),
+  merge_vars=c("row_type", "var_label", "label")) |>
+  remove_footnote_header() |>
+  modify_header(label="**Respiratory Viruses**")
+```
+
+## Epi Curves {.appendix}
+
+```{r Adenovirus curve}
+tab.adeno <- inc[, .(
+  perc_pos=mean(tAdeno, na.rm=TRUE),
+  astar=sum(tAdeno, na.rm=TRUE) + 1,
+  bstar=sum(!tAdeno, na.rm=TRUE) + 1),
+  by=.(sot_status, c_ariyear)]
+tab.adeno[, lwr:=qbeta(0.025, astar, bstar)]
+tab.adeno[, upr:=qbeta(0.975, astar, bstar)]
+tab.adeno[, yrx:=as.numeric(c_ariyear)]
+plt.adeno <- ggplot(tab.adeno[order(sot_status, c_ariyear)],
+                  aes(x=yrx, y=perc_pos, col=factor(sot_status))) +
+  geom_path() +
+  geom_point() +
+  geom_ribbon(aes(ymin=lwr, ymax=upr, fill=factor(sot_status)), col=NA, alpha=0.1) +
+  labs(x="", y="% Positivity", color="Status", fill="Status") +
+  scale_y_continuous(breaks=seq(0, 1, 0.25), labels=seq(0, 100, 25), limits=c(0, 0.5)) +
+  scale_x_continuous(breaks=1:8, labels=levels(tab.adeno$c_ariyear)) +
+  theme_pubclean() +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1))
+```
+
+```{r HCOV curve}
+tab.hcov <- inc[, .(
+  perc_pos=mean(hcov_pos, na.rm=TRUE),
+  astar=sum(hcov_pos, na.rm=TRUE) + 1,
+  bstar=sum(!hcov_pos, na.rm=TRUE) + 1),
+  by=.(sot_status, c_ariyear)]
+tab.hcov[, lwr:=qbeta(0.025, astar, bstar)]
+tab.hcov[, upr:=qbeta(0.975, astar, bstar)]
+tab.hcov[, yrx:=as.numeric(c_ariyear)]
+plt.hcov <- ggplot(tab.hcov[order(sot_status, c_ariyear)],
+                  aes(x=yrx, y=perc_pos, col=factor(sot_status))) +
+  geom_path() +
+  geom_point() +
+  geom_ribbon(aes(ymin=lwr, ymax=upr, fill=factor(sot_status)), col=NA, alpha=0.1) +
+  labs(x="", y="% Positivity", color="Status", fill="Status") +
+  scale_y_continuous(breaks=seq(0, 1, 0.25), labels=seq(0, 100, 25), limits=c(0, 0.5)) +
+  scale_x_continuous(breaks=1:8, labels=levels(tab.hcov$c_ariyear)) +
+  theme_pubclean() +
+  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1))
+```
+
+[In @fig-epi-curves we depcit select Epi Curves for pathogen groups in which we detected a significant difference between children with SOT versus those without immunocompromising conditions. Shaded regions correspond to 95% uncertainty intervals given the density of testing at each point. According to our estimates summarized in @tbl-viruses-summary, children with SOT were statistically more likely to present with human coronaviruses (HCOV) and Adenovirus. Results were statistically adjusted for season, site, age, race/ethnicity, and comorbid conditions.]{.aside}
+
+```{r}
+#| label: fig-epi-curves
+#| fig-cap: "Epidemiological curves for select pathogen groups"
+#| fig-height: 6.5
+#| echo: false
+ggarrange(plt.hcov, plt.adeno, ncol=2, common.legend=TRUE, labels=c("HCOV", "Adeno"),
+          label.x=0.35, vjust=1.25)
+```
+
+# Clinical Characteristics
+
+```{r clinical vars}
+inc[, fever:=fcase(fever==1, T, fever==0, F)]
+inc[fever==TRUE & feverhigh<777, fevertemp:=fcase(
+  is.na(feverdecimal), as.numeric(feverhigh),
+  default=as.numeric(feverhigh) + feverdecimal / 10)]
+inc[, feveronly:=fcase(
+  scough==1, FALSE,
+  scoughv==1, FALSE,
+  sear==1, FALSE,
+  snasal==1, FALSE,
+  ssoreth==1, FALSE,
+  sdyspnea==1, FALSE,
+  smyalgias==1, FALSE,
+  sfatigue==1, FALSE,
+  sheadache==1, FALSE,
+  sconfusion==1, FALSE,
+  seye==1, FALSE,
+  svomit==1, FALSE,
+  sappetite==1, FALSE,
+  sdiarrhea==1, FALSE,
+  sirritable==1, FALSE,
+  sseizure==1, FALSE,
+  sskin==1, FALSE,
+  schills==1, FALSE,
+  sabdompain_pain==1, FALSE,
+  fever==1, TRUE)]
+inc[, scough:=fcase(scough==1, T, scough==0, F)]
+inc[, sear:=fcase(sear==1, T, sear==0, F)]
+inc[, snasal:=fcase(snasal==1, T, snasal==0, F)]
+inc[, ssoreth:=fcase(ssoreth==1, T, ssoreth==0, F)]
+inc[, sdyspnea:=fcase(sdyspnea==1, T, sdyspnea==0, F)]
+inc[, smyalgias:=fcase(smyalgias==1, T, smyalgias==0, F)]
+inc[, sfatigue:=fcase(sfatigue==1, T, sfatigue==0, F)]
+inc[, sheadache:=fcase(sheadache==1, T, sheadache==0, F)]
+inc[, sconfusion:=fcase(sconfusion==1, T, sconfusion==0, F)]
+inc[, seye:=fcase(seye==1, T, seye==0, F)]
+inc[, svomit:=fcase(svomit==1, T, svomit==0, F)]
+inc[, sappetite:=fcase(sappetite==1, T, sappetite==0, F)]
+inc[, sdiarrhea:=fcase(sdiarrhea==1, T, sdiarrhea==0, F)]
+inc[, sirritable:=fcase(sirritable==1, T, sirritable==0, F)]
+inc[, sseizure:=fcase(sseizure==1, T, sseizure==0, F)]
+inc[, sskin:=fcase(sskin==1, T, sskin==0, F)]
+inc[, c_finalstatus:=factor(c_finalstatus, 1:2, c("Admitted", "ED discharged"))]
+inc[c_finalstatus=="Admitted", c_los:=as.integer(c_los)]
+inc[c_finalstatus=="Admitted", c_hospO2:=fcase(
+  c_respsup==1, TRUE,
+  c_suppoxy==1, TRUE,
+  default=FALSE)]
+inc[c_finalstatus=="Admitted", c_icu:=fcase(inptICU==1, T, inptICU==0, F)]
+inc[c_finalstatus=="Admitted", c_mv_ecmo:=fcase(
+  c_intubated==1, TRUE,
+  inptEcmo==1, TRUE,
+  default=FALSE)]
+inc[, c_died:=fcase(c_died==1, T, c_died==0, F)]
+clinical.labs <- list(fever="Fever", fevertemp="Temperature (Fahrenheit)",
+                      feveronly="Fever as only reported symptom",
+                      scough="Cough", snasal="Nasal congestion",
+                      ssoreth="Sore throat", sdyspnea="Dyspnea", smyalgias="Myalgias",
+                      sfatigue="Fatigue", sheadache="Headache",
+                      seye="Conjucttivitis", svomit="Vomiting",
+                      sappetite="Loss of appetite", sdiarrhea="Diarrhea",
+                      sirritable="Irritability", sskin="Skin rash",
+                      c_finalstatus="Final hospitalization status",
+                      c_los="Length of hospital stay (days)",
+                      c_hospO2="Resp. Support or Supp. O2", c_icu="ICU admission",
+                      c_mv_ecmo="Mechanical Ventilation or ECMO", c_died="Patient expired")
+```
+
+```{r multivar gee 3}
+fit.fever <- glm(fever==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(fever)],
+                   family=binomial)
+fit.fevertemp <- glm(fevertemp ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(fevertemp)],
+                   family=gaussian)
+fit.feveronly <- glm(feveronly==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(feveronly)],
+                   family=binomial)
+fit.scough <- glm(scough==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(scough)],
+                   family=binomial)
+fit.snasal <- glm(snasal==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(snasal)],
+                   family=binomial)
+fit.ssoreth <- glm(ssoreth==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(ssoreth)],
+                   family=binomial)
+fit.sdyspnea <- glm(sdyspnea==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sdyspnea)],
+                   family=binomial)
+fit.smyalgias <- glm(smyalgias==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(smyalgias)],
+                   family=binomial)
+fit.sfatigue <- glm(sfatigue==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sfatigue)],
+                   family=binomial)
+fit.sheadache <- glm(sheadache==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sheadache)],
+                   family=binomial)
+fit.seye <- glm(seye==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(seye)],
+                   family=binomial)
+fit.svomit <- glm(svomit==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(svomit)],
+                   family=binomial)
+fit.sappetite <- glm(sappetite==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sappetite)],
+                   family=binomial)
+fit.sdiarrhea <- glm(sdiarrhea==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sdiarrhea)],
+                   family=binomial)
+fit.sirritable <- glm(sirritable==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sirritable)],
+                   family=binomial)
+fit.sskin <- glm(sskin==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(sskin)],
+                   family=binomial)
+fit.finalstatus <- glm(
+  c_finalstatus=="Admitted" ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat,
+  dat=inc[!is.na(c_finalstatus)], family=binomial)
+fit.los <- glm(
+  log(c_los + 1) ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat,
+  dat=inc[!is.na(c_los)], family=gaussian)
+fit.hospO2 <- glm(
+  c_hospO2 ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat,
+  dat=inc[!is.na(c_hospO2)], family=binomial)
+fit.icu <- glm(
+  c_icu ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat,
+  dat=inc[!is.na(c_icu)], family=binomial)
+fit.mvecmo <- glm(
+  c_mv_ecmo ~ is_sot + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat,
+  dat=inc[!is.na(c_mv_ecmo)], family=binomial)
+i <- 1
+tab.clin.adj <- tbl_regression(
+  fit.fever,
+  label=list(is_sot ~ clinical.labs[[i]]),
+  conf.int=FALSE,
+  exponentiate=TRUE,
+  include=is_sot) |>
+  bold_p() |>
+  modify_header(estimate="**Effect**") |>
+  remove_abbreviation() |>
+  modify_abbreviation("Effect = Adjusted Odds Ratio or Beta Coefficient")
+# iterate over remaining characteristics and stack tables
+for (fit in list(fit.fevertemp, fit.feveronly, fit.scough, fit.snasal,
+                 fit.ssoreth, fit.sdyspnea, fit.smyalgias, fit.sfatigue,
+                 fit.sheadache, fit.seye, fit.svomit,
+                 fit.sappetite, fit.sdiarrhea, fit.sirritable,
+                 fit.sskin, fit.finalstatus, fit.los, fit.hospO2,
+                 fit.icu, fit.mvecmo)) {
+  i <- i + 1
+  tab.clin.adj <- tbl_stack(
+    list(
+      tab.clin.adj,
+      tbl_regression(
+        fit,
+        label=list(is_sot ~ clinical.labs[[i]]),
+        conf.int=FALSE,
+        exponentiate=unname(fit[["family"]][1]=="binomial"),
+        include=is_sot) |>
+        bold_p() |>
+        modify_header(estimate="**Effect**") |>
+        remove_abbreviation() |>
+        modify_abbreviation("Effect = Adjusted Odds Ratio or Beta Coefficient")))
+}
+```
+
+[In @tbl-outcomes-summary we report the clinical characteristics stratified by status, including parent-reported symptoms, hospital utilization, and markers of severe illness. For each characteristic, cases were excluded if missing outcomes. We report the estimate of the effect of children with SOT versus those without immunocompromising conditions, adjusted for site, season, age, race/ethnicity, and comorbid conditions; we also report associated p-values. Note, the effect reported is on the odds ratio scale (e.g., $H_{\text{null}}: \text{AOR}=1$), except for fever temperature and length of hospital stay, where the effect reported is the multivariate regression coefficient (e.g., $H_\text{null}: \beta=0$).]{.aside}
+
+```{r}
+#| label: tbl-outcomes-summary
+#| tbl-cap: "Summary of Clinical Characteristics and SOT Effects"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_summary(
+      inc,
+      by=sot_status,
+      label=clinical.labs,
+      include=names(clinical.labs),
+      digits=list(fevertemp ~ c(1, 1)),
+      missing="no") |>
+      add_overall(last=TRUE),
+    tab.clin.adj),
+  tab_spanner=FALSE,
+  merge_vars=c("row_type", "var_label", "label")) |>
+  remove_footnote_header() |>
+  modify_header(label="**Clinical Characteristics**")
+```
+
+## Forest Plot {.appendix}
+
+```{r tabulation}
+clin.results <- data.table(
+  outcome=c("Admitted", "Resp. support", "ICU admit", "MV/ECMO"),
+  aor=c(exp(coef(fit.finalstatus)["is_sot"]),
+        exp(coef(fit.hospO2)["is_sot"]),
+        exp(coef(fit.icu)["is_sot"]),
+        exp(coef(fit.mvecmo)["is_sot"])),
+  lwr=c(exp(confint.default(fit.finalstatus, parm="is_sot")[1]),
+        exp(confint.default(fit.hospO2, parm="is_sot")[1]),
+        exp(confint.default(fit.icu, parm="is_sot")[1]),
+        exp(confint.default(fit.mvecmo, parm="is_sot")[1])),
+  upr=c(exp(confint.default(fit.finalstatus, parm="is_sot")[2]),
+        exp(confint.default(fit.hospO2, parm="is_sot")[2]),
+        exp(confint.default(fit.icu, parm="is_sot")[2]),
+        exp(confint.default(fit.mvecmo, parm="is_sot")[2])))
+clin.results[, outcome:=factor(
+  outcome,
+  c("Admitted", "Resp. support", "ICU admit", "MV/ECMO"),
+  c("Hospital admitted", "Resp. support†", "ICU admitted†", "MV/ECMO†"))]
+clin.results[, outlvl:=-as.integer(outcome)]
+```
+
+```{r}
+#| label: fig-forest-plot
+#| fig-cap: "Forest plot illustrating effects of SOT status on select outcomes"
+#| echo: false
+ggplot(clin.results, aes(y=outlvl, x=aor, col=outcome)) +
+  annotate("rect", xmin=0.05, xmax=1.15, ymin=-4.75, ymax=-1.25, alpha=0.5) +
+  geom_vline(xintercept=1, linewidth=1.5, col="black") +
+  geom_point(size=3) +
+  geom_errorbar(aes(xmin=lwr, xmax=upr), size=1) +
+  scale_color_brewer(palette=7, type="seq", direction=-1) +
+  scale_y_continuous(breaks=-(1:4), labels=levels(clin.results$outcome)) +
+  scale_x_continuous(transform="pseudo_log", breaks=0:5, limits=c(0, 5)) +
+  theme_pubclean() +
+  theme(legend.position="none") +
+  annotate("text", x=1.35, y=-3, label="†outcomes can occur only if admitted",
+           angle=270, color="black") +
+  labs(
+    x="Adjusted Odds Ratio (AOR)", y="",
+    caption="AOR = odds in children with SOT relative to those without immunocompromising conditions")
+```
+
+# Antiviral Utilization
+
+```{r antiviral vars}
+flu <- inc[c_flu_all==1]
+flu[, pr_antivir:=fcase(
+  cantivir==1, TRUE,
+  cantivir==0, FALSE,
+  hantivir_pr==1 & hantivir_osel==1, TRUE,
+  hantivir_pr==1 & hantivir_balo==1, TRUE,
+  hantivir_pr==1 & hantivir_zana==1, TRUE,  
+  hantivir_pr==1 & hantivir_pera==1, TRUE,
+  hantivir_pr==1 & hantivir_rem==1, FALSE,
+  hantivir_pr==1 & hantivir_pax==1, FALSE,
+  hantivir_pr==0, FALSE)]
+flu[, c_hantivirdur:=fcase(
+   c_hantivirdur_osel==1, TRUE,
+   c_hantivirdur_balo==1, TRUE,
+   c_hantivirdur_zana==1, TRUE,
+   c_hantivirdur_pera==1, TRUE,
+   grepl("osel", c_hantivirdur_othersp, ignore.case=TRUE), TRUE,
+   grepl("balo", c_hantivirdur_othersp, ignore.case=TRUE), TRUE,
+   grepl("zana", c_hantivirdur_othersp, ignore.case=TRUE), TRUE,
+   grepl("pera", c_hantivirdur_othersp, ignore.case=TRUE), TRUE,
+   c_hantivirdur==0, FALSE)]
+flu[pr_antivir==TRUE | c_hantivirdur==TRUE, antivir_name:=fcase(
+  avoselt==1, "Oseltamivir",
+  avbalox==1, "Baloxavir",
+  avzanam==1, "Zanamivir",
+  hantivir_osel==1, "Oseltamivir",
+  hantivir_balo==1, "Baloxavir",
+  hantivir_zana==1, "Zanamivir",
+  hantivir_pera==1, "Peramivir",
+  c_hantivirdur_osel==1, "Oseltamivir",
+  c_hantivirdur_balo==1, "Baloxavir",
+  c_hantivirdur_zana==1, "Zanamivir",
+  c_hantivirdur_pera==1, "Peramivir",
+  grepl("osel", c_hantivirdur_othersp, ignore.case=TRUE), "Oseltamivir",
+  grepl("balo", c_hantivirdur_othersp, ignore.case=TRUE), "Baloxavir",
+  grepl("zana", c_hantivirdur_othersp, ignore.case=TRUE), "Zanamivir",
+  grepl("pera", c_hantivirdur_othersp, ignore.case=TRUE), "Peramivir")]
+covid <- inc[c_anysarscov2==1]
+covid[, pr_antivir:=fcase(
+  hantivir_pr==1 & hantivir_osel==1, FALSE,
+  hantivir_pr==1 & hantivir_balo==1, FALSE,
+  hantivir_pr==1 & hantivir_zana==1, FALSE,  
+  hantivir_pr==1 & hantivir_pera==1, FALSE,
+  hantivir_pr==1 & hantivir_rem==1, TRUE,
+  hantivir_pr==1 & hantivir_pax==1, TRUE,
+  hantivir_pr==0, FALSE)]
+covid[, c_hantivirdur:=fcase(
+  grepl("remdesi", c_hantivirdur_othersp, ignore.case=TRUE), TRUE,
+  grepl("paxlovi", c_hantivirdur_othersp, ignore.case=TRUE), TRUE,
+  c_hantivirdur==0, FALSE)]
+covid[pr_antivir==TRUE | c_hantivirdur==TRUE, antivir_name:=fcase(
+  hantivir_rem==1, "Remdesivir",
+  hantivir_pax==1, "Paxlovid",
+  grepl("remdesi", c_hantivirdur_othersp, ignore.case=TRUE), "Remdesivir",
+  grepl("paxlovi", c_hantivirdur_othersp, ignore.case=TRUE), "Paxlovid")]
+```
+
+```{r daysill imputation}
+flu[, daysill_imp:=fcase(
+  !is.na(daysill) & daysill < 15, as.integer(daysill),
+  !is.na(daysill_calc) & daysill_calc < 15, as.integer(daysill_calc),
+  default=as.IDate(scradmitdate) - as.IDate(onsetdt))]
+flu[is.na(daysill_imp), daysill_imp:=round(mean(flu$daysill_calc, na.rm=TRUE))]
+```
+
+```{r multivar gee 4}
+fit.prior <- glm(pr_antivir==TRUE ~ is_sot + daysill_imp,
+                   dat=flu, family=binomial)
+fit.current <- glm(c_hantivirdur==TRUE ~ is_sot + daysill_imp,
+                   dat=flu, family=binomial)
+tab.antiviral.adj <- tbl_stack(
+  list(
+    tbl_regression(
+      fit.prior,
+      label=list(is_sot ~ "Flu AV given prior to visit"),
+      conf.int=FALSE,
+      exponentiate=TRUE,
+      include=is_sot),
+    tbl_regression(
+      fit.current,
+      label=list(is_sot ~ "Flu AV given during visit"),
+      conf.int=FALSE,
+      exponentiate=TRUE,
+      include=is_sot))) |>
+      bold_p() |>
+      modify_header(estimate="**AOR**") |>
+      remove_abbreviation() |>
+      modify_abbreviation("AOR = Adjusted Odds Ratio")
+```
+
+[In @tbl-flu-antivirals, we report Flu-specific antiviral characteristics stratified by SOT status among Influenza-positive cases. Influenza positivity was determined either from laboratory or clinical testing, to capture known or suspected cases at the time of treatment. Odds of antiviral receipt were adjusted for the number of days since illness onset, which were mean-imputed if missing. Associated p-values were reported and bolded where statistically significant.]{.aside}
+
+```{r}
+#| label: tbl-flu-antivirals
+#| tbl-cap: "Summary of Influenza Antiviral Use among Flu-positive Cases"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_stack(
+      list(
+        tbl_summary(
+          flu,
+          by=sot_status,
+          include=c(hresptest, pr_antivir, c_hantivirdur),
+          label=list(hresptest ~ "Clinical respiratory panel performed",
+                     pr_antivir ~ "Flu AV given prior to visit",
+                     c_hantivirdur ~ "Flu AV given during visit"),
+          missing="no"),
+      tbl_summary(
+        flu[pr_antivir==TRUE | c_hantivirdur==TRUE],
+        by=sot_status,
+        include=c(antivir_name),
+        label=list(antivir_name ~ "Antiviral medication name"))),
+      quiet=TRUE),
+    tab.antiviral.adj),
+  tab_spanner=FALSE,
+  merge_vars=c("row_type", "var_label", "label")) |>
+  remove_footnote_header() |>
+  modify_header(label="**Antiviral (AV) Characteristics**")
+```
+
+[@tbl-covid-antivirals summarizes antiviral use among COVID-positive cases, stratified by status. Sample size was insufficient to assess differential odds of antiviral use in this subgroup.]{.aside}
+
+```{r}
+#| label: tbl-covid-antivirals
+#| tbl-cap: "Summary of COVID Antiviral Use among COVID-positive Cases"
+tbl_stack(
+  list(
+    tbl_summary(
+      covid,
+      by=sot_status,
+      include=c(hresptest, pr_antivir, c_hantivirdur),
+      label=list(hresptest ~ "Clinical respiratory panel performed",
+                 pr_antivir ~ "COVID AV given prior to visit",
+                 c_hantivirdur ~ "COVID AV given during visit"),
+      missing="no"),
+  tbl_summary(
+    covid[pr_antivir==TRUE | c_hantivirdur==TRUE],
+    by=sot_status,
+    include=c(antivir_name),
+    label=list(antivir_name ~ "Antiviral medication name"))),
+  quiet=TRUE) |>
+  remove_footnote_header() |>
+  modify_header(label="**Antiviral (AV) Characteristics**")
+```
+
+# Vaccine Uptake
+
+```{r vaccine vars}
+inc[, seasonstart:=fcase(
+  c_ariyear=="2016-17", as.IDate("2016-07-01"),
+  c_ariyear=="2017-18", as.IDate("2017-07-01"),
+  c_ariyear=="2018-19", as.IDate("2018-07-01"),
+  c_ariyear=="2019-20", as.IDate("2019-07-01"),
+  c_ariyear=="2020-21", as.IDate("2020-07-01"),
+  c_ariyear=="2021-22", as.IDate("2021-07-01"),
+  c_ariyear=="2022-23", as.IDate("2022-07-01"),
+  c_ariyear=="2023-24", as.IDate("2023-07-01"))]
+inc[c_agemonths >= 6, currentfluvax:=fcase(
+  vcurrent==1, TRUE,
+  fluCSregnum %in% c(1, 2), TRUE,
+  fluCSprovnum %in% c(1, 2), TRUE,
+  between(flupsregdt1_2021, seasonstart, seasonstart + 365), TRUE,
+  between(flupsregdt2_2021, seasonstart, seasonstart + 365), TRUE,
+  between(flupsprovdt1_2021, seasonstart, seasonstart + 365), TRUE,
+  between(flupsprovdt2_2021, seasonstart, seasonstart + 365), TRUE,
+  between(fludose1, seasonstart, seasonstart + 365), TRUE,
+  between(fludose2, seasonstart, seasonstart + 365), TRUE,
+  between(fludose3, seasonstart, seasonstart + 365), TRUE,
+  between(fludose4, seasonstart, seasonstart + 365), TRUE,
+  between(fludose5, seasonstart, seasonstart + 365), TRUE,
+  between(fludose6, seasonstart, seasonstart + 365), TRUE,
+  between(fludose7, seasonstart, seasonstart + 365), TRUE,
+  between(fludose8, seasonstart, seasonstart + 365), TRUE,
+  between(fludose8, seasonstart, seasonstart + 365), TRUE,
+  between(fludose9, seasonstart, seasonstart + 365), TRUE,
+  between(fludose10, seasonstart, seasonstart + 365), TRUE,
+  flunum==0, FALSE,
+  flupscopy_2021==1, FALSE,
+  fluCSregnum==0, FALSE,
+  fluCSprovnum==0, FALSE,
+  vcurrent==0, FALSE,
+  fluseasonvv==1, FALSE)]
+inc[c_agemonths >= 6, anycovidvax:=fcase(c_VacStat > 0, T, c_VacStat==0, F)]
+vaccine.labs <- list(currentfluvax="Current season Flu vaccination",
+                     anycovidvax="One or more COVID-19 vaccines")
+```
+
+```{r multivar gee 5}
+fit.fluvax <- glm(currentfluvax==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc[!is.na(currentfluvax)],
+                   family=binomial)
+inc.sub <- inc[c_ariyear %in% c("2020-21", "2021-22", "2022-23", "2023-24")]
+inc.sub$c_ariyear <- droplevels(inc.sub$c_ariyear)
+fit.covvax <- glm(anycovidvax==TRUE ~ is_sot + studysite + c_ariyear +
+                     c_ageyears + c_race_int + c_comorbidcat,
+                   dat=inc.sub[!is.na(anycovidvax)],
+                   family=binomial)
+tab.vaccines.adj <- tbl_stack(
+  list(
+    tbl_regression(
+      fit.fluvax,
+      label=list(is_sot ~ "Current season Flu vaccination"),
+      conf.int=FALSE,
+      exponentiate=TRUE,
+      include=is_sot),
+    tbl_regression(
+      fit.covvax,
+      label=list(is_sot ~ "One or more COVID-19 vaccines"),
+      conf.int=FALSE,
+      exponentiate=TRUE,
+      include=is_sot))) |>
+      bold_p() |>
+      modify_header(estimate="**AOR**") |>
+      remove_abbreviation() |>
+      modify_abbreviation("AOR = Adjusted Odds Ratio")
+```
+
+[In @tbl-vaccination-summary we report the frequency of vaccination against Influenza and COVID-19, stratifying by status. For each preventative product, the odds of uptake in children with SOT versus those without immunocompromising conditions were reported, adjusted for site, season, age, race/ethnicity, and comorbid conditions. Associated p-values were reported and bolded if statistically significant.]{.aside}
+
+```{r}
+#| label: tbl-vaccination-summary
+#| tbl-cap: "Summary of Vaccination Behaviors by Status"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_summary(
+      inc,
+      by=sot_status,
+      include=names(vaccine.labs),
+      label=vaccine.labs,
+      missing="no"),
+    tab.vaccines.adj),
+  tab_spanner=FALSE,
+  merge_vars=c("row_type", "var_label", "label")) |>
+  remove_footnote_header() |>
+  modify_header(label="**Vaccinations**")
+```
+
+# Transplant Characteristics
+
+```{r tpx vars}
+tpx <- inc[sot_status=="Children with SOT" & studysite!="Cincinnati" & c_ariyear!="2021-22"]
+tpx$studysite <- droplevels(tpx$studysite)
+tpx$c_ariyear <- droplevels(tpx$c_ariyear)
+tpx[grepl("MULTIVIS|SMALL BOWEL|\\-", tpx_organ, ignore.case=T),
+    tpx_organ:="Small bowel/multivisceral"]
+tpx[, tpx_organ:=factor(
+  tolower(tpx_organ),
+  c("heart", "lung", "liver", "kidney", "intestinal", "small bowel/multivisceral"),
+  c("Heart", "Lung", "Liver", "Kidney", "Other", "Other"))]
+tpx.labs <- c(desc.labs, list(tpx_organ="Organ type"))
+tpx[, tpx_timing:=fcase(
+  tpx_over1yr==FALSE, "<1yr",
+  tpx_over1yr==TRUE, ">1yr",
+  default="Unknown")]
+```
+
+```{r multivar gee 6}
+tpx.sub <- tpx[! studysite %in% c("Rochester", "Seattle", "Kansas City") &
+                 c_ariyear != "2022-23" & tpx_organ != "Other"]
+tpx.sub$studysite <- droplevels(tpx.sub$studysite)
+tpx.sub$c_ariyear <- droplevels(tpx.sub$c_ariyear)
+tpx.sub$tpx_organ <- droplevels(tpx.sub$tpx_organ)
+fit.tpx.desc <- glm(tpx_over1yr ~ studysite + c_ariyear + c_agemonths +
+                         sexch + c_race_int + c_comorbidcat + tpx_organ,
+                       data=tpx.sub[!is.na(tpx_over1yr)],
+                       family=binomial)
+tab.tpx.desc <- tbl_regression(
+  fit.tpx.desc,
+  label=tpx.labs,
+  conf.int=FALSE,
+  exponentiate=TRUE) |>
+  bold_p() |>
+  modify_header(estimate="**AOR**") |>
+  remove_abbreviation() |>
+  modify_abbreviation("AOR = Adjusted Odds Ratio")
+```
+
+[In @tbl-transplant-summary description we report baseline characteristics of children with SOT, stratifying by relative timing since transplant; a subset of cases had unknown time since transplant. For each characteristic, we report the adjusted odds ratio (AOR) of presenting with medically-attended ARI greater than one year since transplant, conditional on all other characteristics in the table. Associated p-values are reported and bolded if statistically significant.]{.aside}
+
+```{r}
+#| label: tbl-transplant-summary
+#| tbl-cap: "Descriptive summary by relative timing to ARI"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_summary(
+      tpx,
+      by=tpx_timing,
+      label=tpx.labs,
+      include=names(tpx.labs)) |>
+      add_overall(last=TRUE),
+    tab.tpx.desc),
+  tab_spanner=c("All children with SOT", "Effect on timing >1yr")) |>
+  remove_footnote_header() |>
+  modify_header(label="**Baseline Characteristics**")
+```
+
+
+```{r tpx clinical}
+fit.finalstatus <- glm(
+  c_finalstatus=="Admitted" ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
+    c_race_int + c_comorbidcat + tpx_organ,
+  dat=tpx.sub[!is.na(c_finalstatus) & !is.na(tpx_over1yr)], family=binomial)
+fit.los <- glm(
+  log(c_los + 1) ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
+    c_race_int + c_comorbidcat + tpx_organ,
+  dat=tpx.sub[!is.na(c_los) & !is.na(tpx_over1yr)], family=gaussian)
+fit.hospO2 <- glm(
+  c_hospO2 ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
+    c_race_int + c_comorbidcat + tpx_organ,
+  dat=tpx.sub[!is.na(c_hospO2) & !is.na(tpx_over1yr)], family=binomial)
+fit.icu <- glm(
+  c_icu ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
+    c_race_int + c_comorbidcat + tpx_organ,
+  dat=tpx.sub[!is.na(c_icu) & !is.na(tpx_over1yr)], family=binomial)
+i <- which(names(clinical.labs)=="c_finalstatus")
+tab.clin.tpx <- tbl_regression(
+  fit.finalstatus,
+  label=list(tpx_over1yr ~ clinical.labs[[i]]),
+  conf.int=FALSE,
+  exponentiate=TRUE,
+  show_single_row=tpx_over1yr,
+  include=tpx_over1yr) |>
+  bold_p() |>
+  modify_header(estimate="**Effect**") |>
+  remove_abbreviation() |>
+  modify_abbreviation("Effect = Adjusted Odds Ratio or Beta Coefficient")
+# iterate over remaining characteristics and stack tables
+for (fit in list(fit.los, fit.hospO2, fit.icu)) {
+  i <- i + 1
+  tab.clin.tpx <- tbl_stack(
+    list(
+      tab.clin.tpx,
+      tbl_regression(
+        fit,
+        label=list(tpx_over1yr ~ clinical.labs[[i]]),
+        conf.int=FALSE,
+        exponentiate=unname(fit[["family"]][1]=="binomial"),
+        show_single_row=tpx_over1yr,
+        include=tpx_over1yr) |>
+        bold_p() |>
+        modify_header(estimate="**Effect**") |>
+        remove_abbreviation() |>
+        modify_abbreviation("Effect = Adjusted Odds Ratio or Beta Coefficient")))
+}
+```
+
+[In @tbl-outcomes-tpx we report select clinical characteristics in children with SOT, stratified by relative timing since transplant. For each characteristic, we report the adjusted effect of >1 year versus <1 year since transplant. Note, the effect reported is on the odds ratio scale (e.g., $H_{\text{null}}: \text{OR}=1$), except for length of hospital stay, where the effect reported is the multivariate regression coefficient (e.g., $H_\text{null}: \beta=0$).]{.aside}
+
+```{r}
+#| label: tbl-outcomes-tpx
+#| tbl-cap: "Clinical Outcomes by relative timing to ARI"
+#| echo: false
+tbl_merge(
+  list(
+    tbl_summary(
+      tpx,
+      by=tpx_timing,
+      label=clinical.labs,
+      include=c(c_finalstatus, c_los, c_hospO2, c_icu, c_mv_ecmo),
+      missing="no") |>
+      add_overall(last=TRUE),
+    tab.clin.tpx),
+  tab_spanner=FALSE,
+  merge_vars=c("row_type", "var_label", "label")) |>
+  remove_footnote_header() |>
+  modify_header(label="**Clinical Characteristics**")
+```
+
