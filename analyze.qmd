@@ -3,7 +3,7 @@ title: "Acute Respiratory Illness in Pediatric Solid Organ Transplants: A multic
 subtitle: "Analytical Results for Pediatric Transplant Manuscript"
 format:
  html:
-   output-file: "Revised Comprehensive Report.html"
+   output-file: "Excluding Fever Only.html"
    toc: true
    toc-depth: 2
    number-sections: false
@@ -99,6 +99,32 @@ inc[, individ:=factor(individ)]
 setkey(inc, individ, scradmitdate)
 ```
 
+```{r exclude fever-only}
+inc[, feveronly:=fcase(
+  scough==1, FALSE,
+  scoughv==1, FALSE,
+  sear==1, FALSE,
+  snasal==1, FALSE,
+  ssoreth==1, FALSE,
+  sdyspnea==1, FALSE,
+  smyalgias==1, FALSE,
+  sfatigue==1, FALSE,
+  sheadache==1, FALSE,
+  sconfusion==1, FALSE,
+  seye==1, FALSE,
+  svomit==1, FALSE,
+  sappetite==1, FALSE,
+  sdiarrhea==1, FALSE,
+  sirritable==1, FALSE,
+  sseizure==1, FALSE,
+  sskin==1, FALSE,
+  schills==1, FALSE,
+  sabdompain_pain==1, FALSE,
+  fever==1, TRUE)]
+# inc[is_sot==0 & feveronly==TRUE, .N, by=c_coinfn] about 70% were non-viral
+inc <- inc[feveronly==FALSE]
+```
+
 [The diagram in @fig-consort depicts case-level inclusion in this analysis on the basis of data availability. The total sample size during the period was `r format(nrow(dat), big.mark=",")` cases. After excluding some cases for the reasons shown in @fig-consort, our analytical sample size was `r format(nrow(inc), big.mark=",")` cases.]{.aside}
 
 ```{r}
@@ -164,24 +190,6 @@ tbl_merge(
   remove_footnote_header() |>
   modify_header(label="**Baseline Characteristics**")
 ```
-
-## Propensity Score Overlap {.appendix}
-
-Treating the regression in @tbl-descriptive-summary as a propensity score model (ie, the propensity to identify as a child with SOT), I examine the overlap in scores between groups. The following figure demonstrates partial overlap:
-
-```{r}
-#| label: fig-ps-overlap
-#| fig-cap: "Propensity score overlap by status"
-#| echo: false
-inc.sub[, ps1:=as.numeric(predict(fit.sot.desc, type="response"))]
-inc.sub[, ps1_logodds:=as.numeric(predict(fit.sot.desc))]
-ggplot(inc.sub, aes(x=ps1_logodds, col=sot_status, fill=sot_status)) +
-  geom_density(bw=3e-1, alpha=0.5) +
-  geom_vline(xintercept=inc.sub[is_sot==0, quantile(ps1_logodds, 0.95)], linetype="dashed") +
-  theme_pubclean() +
-  labs(col="Group", fill="Group")
-```
-[While @fig-ps-overlap depicts the overlap in PS on the log-odds scale, it does not quantify the amount of overlap. Among `r sum(inc.sub$is_sot)` cases in children with SOT, the proportion with PS less than or equal to the 95th percentile of PS in children without IC conditions (depicted with the vertical dashed line) was `r format(inc.sub[is_sot==1, mean(ps1 < inc.sub[is_sot==0, quantile(ps1, 0.95)])], digits=3)`.]{.aside}
 
 # Viral Detections
 
@@ -352,61 +360,6 @@ tbl_merge(
   modify_header(label="**Respiratory Viruses**")
 ```
 
-## Epi Curves {.appendix}
-
-```{r Adenovirus curve}
-tab.adeno <- inc[, .(
-  perc_pos=mean(tAdeno, na.rm=TRUE),
-  astar=sum(tAdeno, na.rm=TRUE) + 1,
-  bstar=sum(!tAdeno, na.rm=TRUE) + 1),
-  by=.(sot_status, c_ariyear)]
-tab.adeno[, lwr:=qbeta(0.025, astar, bstar)]
-tab.adeno[, upr:=qbeta(0.975, astar, bstar)]
-tab.adeno[, yrx:=as.numeric(c_ariyear)]
-plt.adeno <- ggplot(tab.adeno[order(sot_status, c_ariyear)],
-                  aes(x=yrx, y=perc_pos, col=factor(sot_status))) +
-  geom_path() +
-  geom_point() +
-  geom_ribbon(aes(ymin=lwr, ymax=upr, fill=factor(sot_status)), col=NA, alpha=0.1) +
-  labs(x="", y="% Positivity", color="Status", fill="Status") +
-  scale_y_continuous(breaks=seq(0, 1, 0.25), labels=seq(0, 100, 25), limits=c(0, 0.5)) +
-  scale_x_continuous(breaks=1:8, labels=levels(tab.adeno$c_ariyear)) +
-  theme_pubclean() +
-  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1))
-```
-
-```{r HCOV curve}
-tab.hcov <- inc[, .(
-  perc_pos=mean(hcov_pos, na.rm=TRUE),
-  astar=sum(hcov_pos, na.rm=TRUE) + 1,
-  bstar=sum(!hcov_pos, na.rm=TRUE) + 1),
-  by=.(sot_status, c_ariyear)]
-tab.hcov[, lwr:=qbeta(0.025, astar, bstar)]
-tab.hcov[, upr:=qbeta(0.975, astar, bstar)]
-tab.hcov[, yrx:=as.numeric(c_ariyear)]
-plt.hcov <- ggplot(tab.hcov[order(sot_status, c_ariyear)],
-                  aes(x=yrx, y=perc_pos, col=factor(sot_status))) +
-  geom_path() +
-  geom_point() +
-  geom_ribbon(aes(ymin=lwr, ymax=upr, fill=factor(sot_status)), col=NA, alpha=0.1) +
-  labs(x="", y="% Positivity", color="Status", fill="Status") +
-  scale_y_continuous(breaks=seq(0, 1, 0.25), labels=seq(0, 100, 25), limits=c(0, 0.5)) +
-  scale_x_continuous(breaks=1:8, labels=levels(tab.hcov$c_ariyear)) +
-  theme_pubclean() +
-  theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1))
-```
-
-[In @fig-epi-curves we depcit select Epi Curves for pathogen groups in which we detected a significant difference between children with SOT versus those without immunocompromising conditions. Shaded regions correspond to 95% uncertainty intervals given the density of testing at each point. According to our estimates summarized in @tbl-viruses-summary, children with SOT were statistically more likely to present with human coronaviruses (HCOV) and Adenovirus. Results were statistically adjusted for season, site, age, race/ethnicity, and comorbid conditions.]{.aside}
-
-```{r}
-#| label: fig-epi-curves
-#| fig-cap: "Epidemiological curves for select pathogen groups"
-#| fig-height: 6.5
-#| echo: false
-ggarrange(plt.hcov, plt.adeno, ncol=2, common.legend=TRUE, labels=c("HCOV", "Adeno"),
-          label.x=0.35, vjust=1.25)
-```
-
 # Clinical Characteristics
 
 ```{r clinical vars}
@@ -414,27 +367,6 @@ inc[, fever:=fcase(fever==1, T, fever==0, F)]
 inc[fever==TRUE & feverhigh<777, fevertemp:=fcase(
   is.na(feverdecimal), as.numeric(feverhigh),
   default=as.numeric(feverhigh) + feverdecimal / 10)]
-inc[, feveronly:=fcase(
-  scough==1, FALSE,
-  scoughv==1, FALSE,
-  sear==1, FALSE,
-  snasal==1, FALSE,
-  ssoreth==1, FALSE,
-  sdyspnea==1, FALSE,
-  smyalgias==1, FALSE,
-  sfatigue==1, FALSE,
-  sheadache==1, FALSE,
-  sconfusion==1, FALSE,
-  seye==1, FALSE,
-  svomit==1, FALSE,
-  sappetite==1, FALSE,
-  sdiarrhea==1, FALSE,
-  sirritable==1, FALSE,
-  sseizure==1, FALSE,
-  sskin==1, FALSE,
-  schills==1, FALSE,
-  sabdompain_pain==1, FALSE,
-  fever==1, TRUE)]
 inc[, scough:=fcase(scough==1, T, scough==0, F)]
 inc[, sear:=fcase(sear==1, T, sear==0, F)]
 inc[, snasal:=fcase(snasal==1, T, snasal==0, F)]
@@ -464,7 +396,6 @@ inc[c_finalstatus=="Admitted", c_mv_ecmo:=fcase(
   default=FALSE)]
 inc[, c_died:=fcase(c_died==1, T, c_died==0, F)]
 clinical.labs <- list(fever="Fever", fevertemp="Temperature (Fahrenheit)",
-                      feveronly="Fever as only reported symptom",
                       scough="Cough", snasal="Nasal congestion",
                       ssoreth="Sore throat", sdyspnea="Dyspnea", smyalgias="Myalgias",
                       sfatigue="Fatigue", sheadache="Headache",
@@ -486,10 +417,6 @@ fit.fevertemp <- glm(fevertemp ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int + c_comorbidcat,
                    dat=inc[!is.na(fevertemp)],
                    family=gaussian)
-fit.feveronly <- glm(feveronly==TRUE ~ is_sot + studysite + c_ariyear +
-                     c_ageyears + c_race_int + c_comorbidcat,
-                   dat=inc[!is.na(feveronly)],
-                   family=binomial)
 fit.scough <- glm(scough==TRUE ~ is_sot + studysite + c_ariyear +
                      c_ageyears + c_race_int + c_comorbidcat,
                    dat=inc[!is.na(scough)],
@@ -569,7 +496,7 @@ tab.clin.adj <- tbl_regression(
   remove_abbreviation() |>
   modify_abbreviation("Effect = Adjusted Odds Ratio or Beta Coefficient")
 # iterate over remaining characteristics and stack tables
-for (fit in list(fit.fevertemp, fit.feveronly, fit.scough, fit.snasal,
+for (fit in list(fit.fevertemp, fit.scough, fit.snasal,
                  fit.ssoreth, fit.sdyspnea, fit.smyalgias, fit.sfatigue,
                  fit.sheadache, fit.seye, fit.svomit,
                  fit.sappetite, fit.sdiarrhea, fit.sirritable,
@@ -635,7 +562,7 @@ clin.results <- data.table(
 clin.results[, outcome:=factor(
   outcome,
   c("Admitted", "Resp. support", "ICU admit", "MV/ECMO"),
-  c("Hospital admitted", "Resp. support†", "ICU admitted†", "MV/ECMO†"))]
+  c("Hospital admitted", "Resp. support*", "ICU admitted*", "MV/ECMO*"))]
 clin.results[, outlvl:=-as.integer(outcome)]
 ```
 
@@ -644,17 +571,17 @@ clin.results[, outlvl:=-as.integer(outcome)]
 #| fig-cap: "Forest plot illustrating effects of SOT status on select outcomes"
 #| echo: false
 ggplot(clin.results, aes(y=outlvl, x=aor, col=outcome)) +
-  annotate("rect", xmin=0.05, xmax=1.15, ymin=-4.75, ymax=-1.25, alpha=0.5) +
-  geom_vline(xintercept=1, linewidth=1.5, col="black") +
+  geom_vline(xintercept=1, linewidth=2, col="darkgrey") +
   geom_point(size=3) +
   geom_errorbar(aes(xmin=lwr, xmax=upr), size=1) +
   scale_color_brewer(palette=7, type="seq", direction=-1) +
   scale_y_continuous(breaks=-(1:4), labels=levels(clin.results$outcome)) +
-  scale_x_continuous(transform="pseudo_log", breaks=0:5, limits=c(0, 5)) +
+  scale_x_continuous(transform="pseudo_log", breaks=0:5, limits=c(0, 7)) +
   theme_pubclean() +
   theme(legend.position="none") +
-  annotate("text", x=1.35, y=-3, label="†outcomes can occur only if admitted",
-           angle=270, color="black") +
+  annotate("rect", xmin=0, xmax=1.25, ymin=-4.75, ymax=-1.25, alpha=0.2) +
+  annotate("text", x=1.35, y=-3, label="*outcomes can occur only if admitted",
+           angle=270, color="darkgray") +
   labs(
     x="Adjusted Odds Ratio (AOR)", y="",
     caption="AOR = odds in children with SOT relative to those without immunocompromising conditions")
@@ -766,9 +693,8 @@ tbl_merge(
         tbl_summary(
           flu,
           by=sot_status,
-          include=c(hresptest, pr_antivir, c_hantivirdur),
-          label=list(hresptest ~ "Clinical respiratory panel performed",
-                     pr_antivir ~ "Flu AV given prior to visit",
+          include=c(pr_antivir, c_hantivirdur),
+          label=list(pr_antivir ~ "Flu AV given prior to visit",
                      c_hantivirdur ~ "Flu AV given during visit"),
           missing="no"),
       tbl_summary(
@@ -794,9 +720,8 @@ tbl_stack(
     tbl_summary(
       covid,
       by=sot_status,
-      include=c(hresptest, pr_antivir, c_hantivirdur),
-      label=list(hresptest ~ "Clinical respiratory panel performed",
-                 pr_antivir ~ "COVID AV given prior to visit",
+      include=c(pr_antivir, c_hantivirdur),
+      label=list(pr_antivir ~ "COVID AV given prior to visit",
                  c_hantivirdur ~ "COVID AV given during visit"),
       missing="no"),
   tbl_summary(
@@ -966,22 +891,18 @@ tbl_merge(
 
 ```{r tpx clinical}
 fit.finalstatus <- glm(
-  c_finalstatus=="Admitted" ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
-    c_race_int + c_comorbidcat + tpx_organ,
+  c_finalstatus=="Admitted" ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat + tpx_organ,
   dat=tpx.sub[!is.na(c_finalstatus) & !is.na(tpx_over1yr)], family=binomial)
 fit.los <- glm(
-  log(c_los + 1) ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
-    c_race_int + c_comorbidcat + tpx_organ,
+  log(c_los + 1) ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat + tpx_organ,
   dat=tpx.sub[!is.na(c_los) & !is.na(tpx_over1yr)], family=gaussian)
 fit.hospO2 <- glm(
-  c_hospO2 ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
-    c_race_int + c_comorbidcat + tpx_organ,
+  c_hospO2 ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat + tpx_organ,
   dat=tpx.sub[!is.na(c_hospO2) & !is.na(tpx_over1yr)], family=binomial)
 fit.icu <- glm(
-  c_icu ~ tpx_over1yr + studysite + c_ariyear + c_ageyears +
-    c_race_int + c_comorbidcat + tpx_organ,
+  c_icu ~ tpx_over1yr + studysite + c_ariyear + c_ageyears + c_race_int + c_comorbidcat + tpx_organ,
   dat=tpx.sub[!is.na(c_icu) & !is.na(tpx_over1yr)], family=binomial)
-i <- which(names(clinical.labs)=="c_finalstatus")
+i <- 16
 tab.clin.tpx <- tbl_regression(
   fit.finalstatus,
   label=list(tpx_over1yr ~ clinical.labs[[i]]),
