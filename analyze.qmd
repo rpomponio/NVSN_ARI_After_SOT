@@ -165,23 +165,28 @@ tbl_merge(
   modify_header(label="**Baseline Characteristics**")
 ```
 
-## Propensity Score Overlap {.appendix}
+## Repeat Episodes {.appendix}
 
-Treating the regression in @tbl-descriptive-summary as a propensity score model (ie, the propensity to identify as a child with SOT), I examine the overlap in scores between groups. The following figure demonstrates partial overlap:
+Considering only cases with known repeater identifiers, we examine the distribution in the number of included episodes by immunocompromising status.
 
 ```{r}
-#| label: fig-ps-overlap
-#| fig-cap: "Propensity score overlap by status"
+#| label: fig-repeaters-stratified
+#| fig-cap: "Number of enrollments by status"
 #| echo: false
-inc.sub[, ps1:=as.numeric(predict(fit.sot.desc, type="response"))]
-inc.sub[, ps1_logodds:=as.numeric(predict(fit.sot.desc))]
-ggplot(inc.sub, aes(x=ps1_logodds, col=sot_status, fill=sot_status)) +
-  geom_density(bw=3e-1, alpha=0.5) +
-  geom_vline(xintercept=inc.sub[is_sot==0, quantile(ps1_logodds, 0.95)], linetype="dashed") +
+inc.sub <- inc[!is.na(individ)]
+ind <- inc.sub[, .(.N, earliest=min(scradmitdate), sot=sum(is_sot)), by=individ]
+ind[, sot_lifetime:=as.integer(sot>0)]
+ind[, sot_lifetime:=factor(
+  sot_lifetime, 1:0,
+  c("Children with SOT", "Children without immunocomp. conditions"))]
+ggplot(ind, aes(x=N)) +
+  geom_bar() +
   theme_pubclean() +
-  labs(col="Group", fill="Group")
+  facet_wrap(~sot_lifetime, scales="free_y") +
+  scale_x_continuous(breaks=1:12) +
+  labs(x="Number of ARI Cases Enrolled (per patient)", y="No. Patients")
 ```
-[While @fig-ps-overlap depicts the overlap in PS on the log-odds scale, it does not quantify the amount of overlap. Among `r sum(inc.sub$is_sot)` cases in children with SOT, the proportion with PS less than or equal to the 95th percentile of PS in children without IC conditions (depicted with the vertical dashed line) was `r format(inc.sub[is_sot==1, mean(ps1 < inc.sub[is_sot==0, quantile(ps1, 0.95)])], digits=3)`.]{.aside}
+[@fig-repeaters-stratified illustrates the difference in frequency of ARI enrollments per patient, by immunocompromising status. Note the y-axis is measured in number of patients, not episodes. It is apparent that single enrollments were predominent across both groups. However, the mean number of enrollments per patient was higher in children with SOT compared to those without immunocompromising conditions (`r format(ind[sot_lifetime=="Children with SOT", mean(N)], digits=3)` vs. `r format(ind[sot_lifetime=="Children without immunocomp. conditions", mean(N)], digits=3)`). The proportion of repeat episodes was similarly higher in the former group (`r ind[sot_lifetime=="Children with SOT" & N>1, sum(N) - .N]`/`r ind[sot_lifetime=="Children with SOT", sum(N)]` vs. `r ind[sot_lifetime=="Children without immunocomp. conditions" & N>1, sum(N) - .N]`/`r ind[sot_lifetime=="Children without immunocomp. conditions", sum(N)]`)]{.aside}
 
 # Viral Detections
 
