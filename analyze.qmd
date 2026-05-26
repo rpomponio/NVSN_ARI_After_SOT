@@ -190,11 +190,20 @@ Considering only cases with known repeater identifiers, we examine the distribut
 ggplot(cnt, aes(x=enroll_n, y=count)) +
   geom_col() +
   geom_text(
-    aes(label=ifelse(pct > 1, sprintf("%d\n(%.1f%%)", count, pct), "")),
-    vjust=-0.3,
-    size=3) +
-  theme_pubclean() +
+    aes(label=ifelse(pct > 7.5, format(count, big.mark=","), "")),
+    vjust=0.5,
+    hjust=1.1,
+    angle=90,
+    size=2.5,
+    color="white") +
+  geom_text(
+    aes(label=ifelse(pct > 1, sprintf("%.0f%%", pct), "<1%")),
+    hjust=-0.3,
+    angle=90,
+    size=3,
+    color="red") +
   facet_wrap(~sot_lifetime, scales="free_y") +
+  theme_pubclean() +
   scale_x_continuous(breaks=1:12) +
   scale_y_continuous(expand=expansion(mult=c(0, 0.15))) +
   labs(x="Number of ARI Cases Enrolled (per patient)", y="No. Patients")
