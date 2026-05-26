@@ -167,26 +167,38 @@ tbl_merge(
 
 ## Repeat Episodes {.appendix}
 
-Considering only cases with known repeater identifiers, we examine the distribution in the number of included episodes by immunocompromising status.
-
 ```{r}
-#| label: fig-repeaters-stratified
-#| fig-cap: "Number of enrollments by status"
-#| echo: false
+# Pre-compute counts and percentages per facet group
 inc.sub <- inc[!is.na(individ)]
 ind <- inc.sub[, .(.N, earliest=min(scradmitdate), sot=sum(is_sot)), by=individ]
 ind[, sot_lifetime:=as.integer(sot>0)]
 ind[, sot_lifetime:=factor(
   sot_lifetime, 1:0,
   c("Children with SOT", "Children without immunocomp. conditions"))]
-ggplot(ind, aes(x=N)) +
-  geom_bar() +
+cnt <- ind[, .(count=.N), by=.(sot_lifetime, enroll_n=N)][
+  , pct := count / sum(count) * 100, by=sot_lifetime]
+```
+
+Considering only cases with known repeater identifiers, we examine the distribution in the number of included episodes by immunocompromising status.
+
+[@fig-repeaters-stratified illustrates the difference in frequency of ARI enrollments per patient, by immunocompromising status. Note the y-axis is measured in number of patients, not episodes. It is apparent that single enrollments were predominent across both groups. However, the mean number of enrollments per patient was higher in children with SOT compared to those without immunocompromising conditions (`r format(ind[sot_lifetime=="Children with SOT", mean(N)], digits=3)` vs. `r format(ind[sot_lifetime=="Children without immunocomp. conditions", mean(N)], digits=3)`). The proportion of repeat episodes was similarly higher in the former group (`r ind[sot_lifetime=="Children with SOT" & N>1, sum(N) - .N]`/`r ind[sot_lifetime=="Children with SOT", sum(N)]` vs. `r ind[sot_lifetime=="Children without immunocomp. conditions" & N>1, sum(N) - .N]`/`r ind[sot_lifetime=="Children without immunocomp. conditions", sum(N)]`)]{.aside}
+
+```{r}
+#| label: fig-repeaters-stratified
+#| fig-cap: "Number of enrollments by status"
+#| echo: false
+ggplot(cnt, aes(x=enroll_n, y=count)) +
+  geom_col() +
+  geom_text(
+    aes(label=ifelse(pct > 1, sprintf("%d\n(%.1f%%)", count, pct), "")),
+    vjust=-0.3,
+    size=3) +
   theme_pubclean() +
   facet_wrap(~sot_lifetime, scales="free_y") +
   scale_x_continuous(breaks=1:12) +
+  scale_y_continuous(expand=expansion(mult=c(0, 0.15))) +
   labs(x="Number of ARI Cases Enrolled (per patient)", y="No. Patients")
 ```
-[@fig-repeaters-stratified illustrates the difference in frequency of ARI enrollments per patient, by immunocompromising status. Note the y-axis is measured in number of patients, not episodes. It is apparent that single enrollments were predominent across both groups. However, the mean number of enrollments per patient was higher in children with SOT compared to those without immunocompromising conditions (`r format(ind[sot_lifetime=="Children with SOT", mean(N)], digits=3)` vs. `r format(ind[sot_lifetime=="Children without immunocomp. conditions", mean(N)], digits=3)`). The proportion of repeat episodes was similarly higher in the former group (`r ind[sot_lifetime=="Children with SOT" & N>1, sum(N) - .N]`/`r ind[sot_lifetime=="Children with SOT", sum(N)]` vs. `r ind[sot_lifetime=="Children without immunocomp. conditions" & N>1, sum(N) - .N]`/`r ind[sot_lifetime=="Children without immunocomp. conditions", sum(N)]`)]{.aside}
 
 # Viral Detections
 
