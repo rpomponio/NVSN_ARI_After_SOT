@@ -23,6 +23,7 @@ library(ggplot2)
 library(consort)
 library(geepack)
 library(ggpubr)
+library(grid)
 ```
 
 ```{r data}
@@ -82,8 +83,8 @@ dat[, exclusion1:=fcase(
   ic_status=="Medication", "Immunosuppressive Medication(s)",
   ic_status=="Other Deficiency", "Other Immune Deficiency")]
 dat[is.na(exclusion1), sot_status:=fcase(
-  ic_status=="SOT", "Children with SOT",
-  default="Children without immunocomp. conditions")]
+  ic_status=="SOT", "ARI Episodes in Children with SOT",
+  default="ARI Episodes in Children without immunocomp. conditions")]
 dat[is.na(exclusion1), exclusion2:=fcase(
   is.na(c_ageyears), "Missing age",
   is.na(c_race_int), "Missing race/ethnicity",
@@ -94,7 +95,7 @@ dat[is.na(exclusion1), exclusion2:=fcase(
 
 ```{r included data}
 inc <- dat[is.na(exclusion1) & is.na(exclusion2)]
-inc[, is_sot:=as.integer(sot_status=="Children with SOT")]
+inc[, is_sot:=as.integer(sot_status=="ARI Episodes in Children with SOT")]
 inc[, individ:=factor(individ)]
 setkey(inc, individ, scradmitdate)
 ```
@@ -109,15 +110,19 @@ setkey(inc, individ, scradmitdate)
 p <- consort_plot(
   dat,
   orders=c(
-    Caseid="Total cases, 2016-2024",
+    Caseid="Total episodes, 2016-2024",
     exclusion1="Excluded",
-    sot_status="Total cases eligible",
+    sot_status="Total episodes eligible",
     exclusion2="Excluded",
-    Caseid="Complete cases"),
+    Caseid="Episodes with complete data"),
   side_box=c("exclusion1", "exclusion2"),
   allocation=c("sot_status"),
   cex=0.75)
 p
+# save TIFF
+tiff("figS1.tiff", width=9, height=7, units="in", res=300, compression="lzw")
+plot(p)
+dev.off()
 ```
 
 # Baseline Characteristics
@@ -167,7 +172,7 @@ tbl_merge(
 
 ## Repeat Episodes {.appendix}
 
-```{r}
+```{r setup repeaters}
 # Pre-compute counts and percentages per facet group
 inc.sub <- inc[!is.na(individ)]
 ind <- inc.sub[, .(.N, earliest=min(scradmitdate), sot=sum(is_sot)), by=individ]
@@ -187,7 +192,7 @@ Considering only cases with known repeater identifiers, we examine the distribut
 #| label: fig-repeaters-stratified
 #| fig-cap: "Number of enrollments by status"
 #| echo: false
-ggplot(cnt, aes(x=enroll_n, y=count)) +
+p <- ggplot(cnt, aes(x=enroll_n, y=count)) +
   geom_col() +
   geom_text(
     aes(label=ifelse(pct > 7.5, format(count, big.mark=","), "")),
@@ -206,7 +211,10 @@ ggplot(cnt, aes(x=enroll_n, y=count)) +
   theme_pubclean() +
   scale_x_continuous(breaks=1:12) +
   scale_y_continuous(expand=expansion(mult=c(0, 0.15))) +
-  labs(x="Number of ARI Cases Enrolled (per patient)", y="No. Patients")
+  labs(x="Number of ARI Episodes Enrolled (per patient)", y="No. Patients")
+p
+# save TIFF
+ggsave("figS2.tiff", plot=p, width=7, height=5, dpi=300, compression="lzw")
 ```
 
 # Viral Detections
@@ -669,7 +677,7 @@ clin.results[, outlvl:=-as.integer(outcome)]
 #| label: fig-forest-plot
 #| fig-cap: "Forest plot illustrating effects of SOT status on select outcomes"
 #| echo: false
-ggplot(clin.results, aes(y=outlvl, x=aor, col=outcome)) +
+p <- ggplot(clin.results, aes(y=outlvl, x=aor, col=outcome)) +
   annotate("rect", xmin=0.05, xmax=1.15, ymin=-4.75, ymax=-1.25, alpha=0.5) +
   geom_vline(xintercept=1, linewidth=1.5, col="black") +
   geom_point(size=3) +
@@ -683,7 +691,10 @@ ggplot(clin.results, aes(y=outlvl, x=aor, col=outcome)) +
            angle=270, color="black") +
   labs(
     x="Adjusted Odds Ratio (AOR)", y="",
-    caption="AOR = odds in children with SOT relative to those without immunocompromising conditions")
+    caption="AOR = adj. odds, cases in children with SOT relative to those without immunocompromising conditions")
+p
+# save TIFF
+ggsave("fig1.tiff", plot=p, width=7, height=5, dpi=300, compression="lzw")
 ```
 
 # Antiviral Utilization
@@ -932,7 +943,7 @@ tbl_merge(
 # Transplant Characteristics
 
 ```{r tpx vars}
-tpx <- inc[sot_status=="Children with SOT" & studysite!="Cincinnati" & c_ariyear!="2021-22"]
+tpx <- inc[is_sot==1 & studysite!="Cincinnati" & c_ariyear!="2021-22"]
 tpx$studysite <- droplevels(tpx$studysite)
 tpx$c_ariyear <- droplevels(tpx$c_ariyear)
 tpx[grepl("MULTIVIS|SMALL BOWEL|\\-", tpx_organ, ignore.case=T),
