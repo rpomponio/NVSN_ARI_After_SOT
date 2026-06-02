@@ -105,16 +105,17 @@ setkey(inc, individ, scradmitdate)
 ```{r}
 #| label: fig-consort
 #| fig-cap: Diagram representing case inclusion
-#| fig-width: 7
+#| fig-width: 9
+#| fig-height: 7
 #| echo: false
 p <- consort_plot(
   dat,
   orders=c(
-    Caseid="Total episodes, 2016-2024",
+    Caseid="Total ARI Episodes, 2016-2024",
     exclusion1="Excluded",
-    sot_status="Total episodes eligible",
+    sot_status="Eligible ARI Episodes",
     exclusion2="Excluded",
-    Caseid="Episodes with complete data"),
+    Caseid="ARI episodes with complete data"),
   side_box=c("exclusion1", "exclusion2"),
   allocation=c("sot_status"),
   cex=0.75)
@@ -211,7 +212,7 @@ p <- ggplot(cnt, aes(x=enroll_n, y=count)) +
   theme_pubclean() +
   scale_x_continuous(breaks=1:12) +
   scale_y_continuous(expand=expansion(mult=c(0, 0.15))) +
-  labs(x="Number of ARI Episodes Enrolled (per patient)", y="No. Patients")
+  labs(x="Number of ARI Episodes, per patient", y="No. Patients")
 p
 # save TIFF
 ggsave("figS2.tiff", plot=p, width=7, height=5, dpi=300, compression="lzw")
@@ -691,7 +692,7 @@ p <- ggplot(clin.results, aes(y=outlvl, x=aor, col=outcome)) +
            angle=270, color="black") +
   labs(
     x="Adjusted Odds Ratio (AOR)", y="",
-    caption="AOR = adj. odds, cases in children with SOT relative to those without immunocompromising conditions")
+    caption="AOR = adj. odds, ARI episodes in children with SOT relative to those without immunocompromising conditions")
 p
 # save TIFF
 ggsave("fig1.tiff", plot=p, width=7, height=5, dpi=300, compression="lzw")
