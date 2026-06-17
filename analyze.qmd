@@ -24,6 +24,7 @@ library(consort)
 library(geepack)
 library(ggpubr)
 library(grid)
+source("wald_function.R")
 ```
 
 ```{r data}
@@ -143,7 +144,7 @@ fit.sot.desc <- glm(reformulate(desc.vars, response="is_sot"),
 tab.sot.desc <- tbl_regression(
   fit.sot.desc,
   label=desc.labs,
-  conf.int=FALSE,
+  tidy_fun=tidy.glm.wald,
   exponentiate=TRUE) |>
   bold_p() |>
   modify_header(estimate="**AOR**") |>
@@ -275,7 +276,7 @@ i <- 1
 tab.viral.pos <- tbl_regression(
   fit.novir,
   label=list(is_sot ~ virus.labs[[i]]),
-  conf.int=FALSE,
+  tidy_fun=tidy.glm.wald,
   exponentiate=TRUE,
   include=is_sot) |>
   bold_p()
@@ -289,7 +290,7 @@ for (fit in list(fit.hcov, fit.flu, fit.rsv, fit.covid, fit.adeno,
       tbl_regression(
         fit,
         label=list(is_sot ~ virus.labs[[i]]),
-        conf.int=FALSE,
+        tidy_fun=tidy.glm.wald,
         exponentiate=TRUE,
         include=is_sot) |>
         bold_p()))
@@ -337,7 +338,7 @@ i <- 1
 tab.viral.adj <- tbl_regression(
   fit.novir,
   label=list(is_sot ~ virus.labs[[i]]),
-  conf.int=FALSE,
+  tidy_fun=tidy.glm.wald,
   exponentiate=TRUE,
   include=is_sot) |>
   bold_p() |>
@@ -354,7 +355,7 @@ for (fit in list(fit.hcov, fit.flu, fit.rsv, fit.covid, fit.adeno, fit.mpv,
       tbl_regression(
         fit,
         label=list(is_sot ~ virus.labs[[i]]),
-        conf.int=FALSE,
+        tidy_fun=tidy.glm.wald,
         exponentiate=TRUE,
         include=is_sot) |>
         bold_p() |>
@@ -596,7 +597,7 @@ i <- 1
 tab.clin.adj <- tbl_regression(
   fit.fever,
   label=list(is_sot ~ clinical.labs[[i]]),
-  conf.int=FALSE,
+  tidy_fun=tidy.glm.wald,
   exponentiate=TRUE,
   include=is_sot) |>
   bold_p() |>
@@ -617,7 +618,7 @@ for (fit in list(fit.fevertemp, fit.feveronly, fit.scough, fit.snasal,
       tbl_regression(
         fit,
         label=list(is_sot ~ clinical.labs[[i]]),
-        conf.int=FALSE,
+        tidy_fun=tidy.glm.wald,
         exponentiate=unname(fit[["family"]][1]=="binomial"),
         include=is_sot) |>
         bold_p() |>
@@ -776,13 +777,13 @@ tab.antiviral.adj <- tbl_stack(
     tbl_regression(
       fit.prior,
       label=list(is_sot ~ "Flu AV given prior to visit"),
-      conf.int=FALSE,
+      tidy_fun=tidy.glm.wald,
       exponentiate=TRUE,
       include=is_sot),
     tbl_regression(
       fit.current,
       label=list(is_sot ~ "Flu AV given during visit"),
-      conf.int=FALSE,
+      tidy_fun=tidy.glm.wald,
       exponentiate=TRUE,
       include=is_sot))) |>
       bold_p() |>
@@ -905,13 +906,13 @@ tab.vaccines.adj <- tbl_stack(
     tbl_regression(
       fit.fluvax,
       label=list(is_sot ~ "Current season Flu vaccination"),
-      conf.int=FALSE,
+      tidy_fun=tidy.glm.wald,
       exponentiate=TRUE,
       include=is_sot),
     tbl_regression(
       fit.covvax,
       label=list(is_sot ~ "One or more COVID-19 vaccines"),
-      conf.int=FALSE,
+      tidy_fun=tidy.glm.wald,
       exponentiate=TRUE,
       include=is_sot))) |>
       bold_p() |>
@@ -973,7 +974,7 @@ fit.tpx.desc <- glm(tpx_over1yr ~ studysite + c_ariyear + c_agemonths +
 tab.tpx.desc <- tbl_regression(
   fit.tpx.desc,
   label=tpx.labs,
-  conf.int=FALSE,
+  tidy_fun=tidy.glm.wald,
   exponentiate=TRUE) |>
   bold_p() |>
   modify_header(estimate="**AOR**") |>
@@ -1023,7 +1024,7 @@ i <- which(names(clinical.labs)=="c_finalstatus")
 tab.clin.tpx <- tbl_regression(
   fit.finalstatus,
   label=list(tpx_over1yr ~ clinical.labs[[i]]),
-  conf.int=FALSE,
+  tidy_fun=tidy.glm.wald,
   exponentiate=TRUE,
   show_single_row=tpx_over1yr,
   include=tpx_over1yr) |>
@@ -1040,7 +1041,7 @@ for (fit in list(fit.los, fit.hospO2, fit.icu)) {
       tbl_regression(
         fit,
         label=list(tpx_over1yr ~ clinical.labs[[i]]),
-        conf.int=FALSE,
+        tidy_fun=tidy.glm.wald,
         exponentiate=unname(fit[["family"]][1]=="binomial"),
         show_single_row=tpx_over1yr,
         include=tpx_over1yr) |>
