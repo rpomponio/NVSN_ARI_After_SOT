@@ -3,7 +3,7 @@ title: "Acute Respiratory Illness in Pediatric Solid Organ Transplants: A multic
 subtitle: "Analytical Results for Pediatric Transplant Manuscript"
 format:
  html:
-   output-file: "Revised Comprehensive Report.html"
+   output-file: "Only Virus Positives.html"
    toc: true
    toc-depth: 2
    number-sections: false
@@ -444,6 +444,11 @@ ggarrange(plt.hcov, plt.adeno, ncol=2, common.legend=TRUE, labels=c("HCOV", "Ade
 ```
 
 # Clinical Characteristics
+
+```{r}
+# SENSITIVITY ANALYSIS: INCLUDE ONLY VIRUS POSITIVES
+inc <- inc[novirus==FALSE]
+```
 
 ```{r clinical vars}
 inc[, fever:=fcase(fever==1, T, fever==0, F)]
